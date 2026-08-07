@@ -1,0 +1,2722 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="dark">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>rogueMerge — 알을 떨어뜨려 합치고, 주문을 납품한다</title>
+<meta name="description" content="떨어뜨리기 · 합치기 · 납품하기. 한 손으로 즐기는 HTML5 드롭 머지 퍼즐. 설치 없이 브라우저에서 바로 플레이.">
+<meta name="theme-color" content="#12131a">
+<meta name="color-scheme" content="dark">
+<meta name="author" content="김준완">
+<meta name="rating" content="general">
+<meta property="og:type" content="website">
+<meta property="og:title" content="rogueMerge">
+<meta property="og:description" content="떨어뜨리기 · 합치기 · 납품하기. 한 손으로 즐기는 HTML5 드롭 머지 퍼즐.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312131a'/%3E%3Crect x='11' y='11' width='19' height='19' rx='5' fill='%233b6fd4'/%3E%3Crect x='34' y='11' width='19' height='19' rx='5' fill='%23244a99'/%3E%3Crect x='11' y='34' width='42' height='19' rx='5' fill='%234d86ee'/%3E%3C/svg%3E">
+<style>
+  :root{ --bg:#12131a; --panel:#1b1d27; --line:#2a2d3a; --txt:#e8e9ef; --dim:#8b90a3;
+         --ok:#6ee7a8; --gold:#ffd166;
+         /* 입체 토큰 — 하드코딩 금지, 여기서만 조절 */
+         --lipT:inset 0 1px 0 rgba(255,255,255,.07);      /* 패널 윗면 하이라이트 */
+         --lipB:inset 0 -2px 0 rgba(0,0,0,.34);           /* 패널 아랫면 두께 */
+         --drop:0 2px 0 rgba(0,0,0,.42);                  /* 버튼 두께 */
+         --glowOk:0 0 0 1px rgba(110,231,168,.55), 0 0 14px rgba(110,231,168,.30) }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{background:#0d0e14}          /* iframe 첫 프레임 흰 깜빡임 차단 */
+  html,body{margin:0;height:100%;color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    overscroll-behavior:none;user-select:none;
+    /* 단색 → 중앙이 살짝 뜨는 방사형 + 비네트. 평면 웹처럼 안 보이게 하는 1순위 */
+    background:
+      radial-gradient(120% 62% at 50% 34%, #1d2030 0%, #14161f 46%, #0d0e14 100%),
+      var(--bg);
+    background-attachment:fixed}
+  #app{max-width:440px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;
+    padding:0 9px 8px;gap:6px;position:relative;overflow:hidden}
+
+  /* ★ v2.3 — 테두리를 "보드 점유 게이지"에서 "인터랙션 발광"으로 바꿨다.
+     점유율 단계는 계속 켜져 있는 신호라 몇 판 지나면 배경이 되고, 정작 위험할 때
+     빨갛게 물든 화면이 판을 읽는 걸 방해했다.
+     지금은 알이 떨어지고 합쳐지는 그 순간만 짧게 빛난다. 색은 그 알의 색.
+     .fx 를 .ok 뒤에 둬서 겹칠 때 발광이 이긴다. */
+  #edge{position:fixed;inset:0;pointer-events:none;z-index:30;
+    box-shadow:inset 0 0 0 0 rgba(255,180,84,0);transition:box-shadow .26s ease-out}
+  #edge.ok{box-shadow:inset 0 0 44px 6px rgba(110,231,168,.18)}
+  #edge.fx{box-shadow:inset 0 0 38px 5px var(--fxc);transition:box-shadow .07s ease-out}
+  .tag{font-size:10px;color:var(--dim);letter-spacing:.3px}
+
+  /* ── 상단: 목표 | PIP(16:9) | 골드 ── */
+  #topbar{display:flex;gap:6px;align-items:stretch;flex:0 0 auto;padding-top:7px;
+    height:calc(min(100vw - 18px, 422px) * 0.338)}
+  #pip{height:100%;aspect-ratio:16/9;flex:0 0 auto;position:relative;border-radius:12px;
+    background:linear-gradient(180deg,#08090d,#101119);border:1px solid #23273a;
+    display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .side{flex:1;min-width:0;border:1px solid var(--line);
+    background:linear-gradient(180deg,#20232f,#171923);
+    box-shadow:var(--lipT),var(--lipB);
+    border-radius:12px;padding:5px 6px;display:flex;flex-direction:column}
+  .side .tag{margin-bottom:3px}
+  .goalcol{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-start;gap:2px;
+    overflow-y:auto;scrollbar-width:none;
+    /* 목표가 4종 넘으면 잘린다 — 아래를 페이드해서 "더 있다"는 걸 보이게 */
+    -webkit-mask-image:linear-gradient(180deg,#000 0,#000 calc(100% - 12px),transparent 100%)}
+  .goalcol::-webkit-scrollbar{width:4px}
+  .goalcol::-webkit-scrollbar-track{background:transparent}
+  .goalcol::-webkit-scrollbar-thumb{background:#4d5678;border-radius:99px}
+  .side .tag b{color:#cfd4e4;font-variant-numeric:tabular-nums}
+  .pausebtn{flex:0 0 auto;height:38%;border-radius:8px;
+    background:linear-gradient(180deg,#242835,#14161f);
+    border:1px solid #2b3040;display:flex;align-items:center;justify-content:center;
+    margin-bottom:4px;box-shadow:var(--lipT),var(--drop);transition:transform .08s}
+  .pausebtn:active{transform:translateY(2px);box-shadow:var(--lipT)}
+  /* ★ v2.3 — 인게임에 다이아도 띄운다. 아이템 재화가 다이아로 옮겨갔는데
+     보유량이 안 보이면 "살 수 있나"를 판단할 수가 없다.
+     골드는 크게(성장 예산), 다이아는 작게(판 구제) — 위계를 크기로 준다.
+     아이콘과 숫자는 반드시 한 줄 — 줄바꿈되면 "값"이 아니라 "라벨+값"으로 읽힌다 */
+  /* 다이아는 평소엔 안 띄운다 — 인게임에 다이아 쓸 일이 아이템뿐이라
+     상시 노출은 판단에 안 쓰이는 숫자를 계속 보여주는 것. 아이템 창을 열 때만
+     골드 자리를 그대로 넘겨받는다(같은 자리 = 같은 역할이라는 신호). */
+  .gemrow{display:none;flex:1;flex-direction:row;align-items:center;
+    justify-content:center;gap:5px;white-space:nowrap}
+  #goldPane.gemmode .gold{display:none}
+  #goldPane.gemmode .gemrow{display:flex}
+  #goldPane.gemmode .gemn{font-size:16px;font-weight:900}
+  .embtn{display:none;flex:0 0 auto;gap:4px;width:100%}
+  html.embed .embtn{display:flex}
+  .embtn button{flex:1;height:30px;border-radius:8px;background:#232735;border:1px solid var(--line);
+    color:#9aa0b3;font-size:14px;font-weight:900;line-height:1;
+    display:flex;align-items:center;justify-content:center}
+  .embtn button:active{transform:translateY(1px);background:#2a2f40}
+  .loot{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+  html.embed .loot{display:flex} html.embed #goldPane .gold{display:none}
+  html.embed #goldPane.gemmode .loot{display:none}
+  .loot .llab{font-size:8.5px;font-weight:800;letter-spacing:.06em;color:#6b7186}
+  .loot .lnum{display:flex;align-items:baseline;gap:3px}
+  .loot .lnum b{font-size:19px;font-weight:900;color:#9fe8c8;font-variant-numeric:tabular-nums}
+  .loot .lnum i{font-size:11px;font-weight:900;color:#ffd166;font-style:normal}
+  .loot .lmat{font-size:8.5px;font-weight:800;color:#8b90a3;line-height:1.25;text-align:center;
+    max-width:84px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gold{flex:1;display:flex;flex-direction:row;align-items:center;justify-content:center;
+    gap:5px;white-space:nowrap;min-width:0}
+  .gold svg{flex:0 0 auto}
+  /* 구매 결과 안내 — 버튼 옆에 붙는다. 화면 위로 날아가는 토스트로 띄우면
+     방금 누른 버튼과 메시지가 떨어져서 인과가 안 읽힌다 */
+  /* 구매 결과 안내 — 버튼 바로 아래. 화면 위로 날아가는 토스트로 띄우면
+     방금 누른 버튼과 메시지가 떨어져서 인과가 안 읽힌다.
+     버튼 3개일 땐 가로로 끼워넣으면 두 글자씩 끊겨서 오히려 안 읽힌다 */
+  .buynote{height:0;overflow:hidden;opacity:0;transition:.2s ease;
+    font-size:12px;font-weight:800;color:#ffcf7a;text-align:center}
+  .buynote.on{height:auto;opacity:1;margin-top:9px}
+  .gemn{font-size:10.5px;font-weight:800;color:#8ad8ff;font-variant-numeric:tabular-nums;
+    filter:drop-shadow(0 1px 0 rgba(0,0,0,.55))}
+  .goldn{font-size:16px;font-weight:900;font-variant-numeric:tabular-nums;
+    background:linear-gradient(180deg,#fff3c4,#ffd166 45%,#e2952a);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 1px 0 rgba(0,0,0,.55))}
+  #pipHint{position:absolute;inset:8px;border:1.5px dashed #2f3444;border-radius:11px;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+    padding-bottom:6px;gap:4px;
+    color:#454b5e;font-size:9.5px;font-weight:700;pointer-events:none;transition:opacity .4s}
+  #pipHint.hide{opacity:0}
+  #stageTop{position:absolute;top:5px;left:0;right:0;text-align:center;font-size:11px;
+    font-weight:800;color:#5b6176;letter-spacing:.6px;z-index:2}
+  .petrow{display:flex;gap:9px;align-items:flex-end;z-index:2;margin-top:6px}
+  .bubble{position:absolute;left:0;right:0;bottom:6px;display:flex;justify-content:center;z-index:4}
+  .bbox{background:var(--bc,#232735);border:1px solid var(--bl,#343b4f);border-radius:9px;
+    padding:3px 11px;font-size:13px;font-weight:800;color:var(--bt,#c3c8d8);
+    white-space:nowrap;transition:all .2s}
+  .bubble .tail{position:absolute;top:-5px;left:50%;width:9px;height:9px;
+    background:var(--bc,#232735);
+    border-left:1px solid var(--bl,#343b4f);border-top:1px solid var(--bl,#343b4f);
+    transform:rotate(45deg);
+    margin-left:-4.5px;transition:left .16s ease}
+  .bubble.hot .bbox,.bubble.gold .bbox{background:var(--bc,#232735);border-color:var(--bl,#343b4f);
+    color:var(--bt,#e8e9ef)}
+  .bubble.hot .tail,.bubble.gold .tail{background:var(--bc,#232735);border-color:var(--bl,#343b4f)}
+  .bubble.hot .bbox{transform:scale(1.1);animation:neon 1.1s ease-in-out infinite}
+  .bubble.gold .bbox{transform:scale(1.2);animation:neon .7s ease-in-out infinite}
+  @keyframes neon{0%,100%{text-shadow:0 0 4px var(--bt,#fff),0 0 9px var(--bt,#fff)}
+    50%{text-shadow:0 0 9px var(--bt,#fff),0 0 20px var(--bt,#fff),0 0 30px var(--bt,#fff)}}
+  .bubble.say .bbox{font-size:11px;font-weight:800;animation:none;text-shadow:none}
+  /* 값 상한 제거 후 14티어(16384) 위는 색이 포화된다 — 링으로 구분 */
+  .cell .vhi{box-shadow:0 0 0 2px rgba(255,255,255,.55), 0 0 10px rgba(255,255,255,.25)}
+  .pslot{position:relative;transition:transform .18s}
+  /* 권장레벨 충족 표시 — 목표 패널의 ✓와 같은 초록. 우하단에 걸쳐 앉혀서
+     펫 실루엣을 안 가리면서도 "이 색은 준비됐다"가 주변시로 들어온다 */
+  .pchk{position:absolute;right:-1px;bottom:3px;width:16px;height:16px;border-radius:99px;
+    background:var(--ok);color:#0b1d13;font-size:11px;font-weight:900;line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    border:2px solid #12131a;box-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .pslot.bounce{animation:bnc .42s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes bnc{0%{transform:translateY(0)}35%{transform:translateY(-13px) scale(1.08)}
+    100%{transform:translateY(0)}}
+  .pslot.dim{opacity:.22;filter:grayscale(1)}
+
+
+  /* ── HUD ── */
+  .hud{display:flex;gap:7px;align-items:stretch;flex:0 0 auto}
+  .g{display:flex;align-items:center;gap:4px;padding:2px 3px;border-radius:6px}
+  .g.done{background:#16241d}
+  .gchip{width:21px;height:21px;border-radius:5px;display:flex;align-items:center;
+    justify-content:center;font-weight:800;font-size:8px;color:#0d0f16;flex:0 0 21px}
+  .gnum{font-size:12px;font-weight:800;font-variant-numeric:tabular-nums}
+  .gnum.ck{color:var(--ok)}
+  .orders{flex:1;min-width:0;border:1px solid #333a4d;
+    background:linear-gradient(180deg,#14161f,#1b1e2b);
+    border-radius:11px;padding:6px;overflow-x:auto;overflow-y:hidden;
+    display:flex;gap:5px;scrollbar-width:none;
+    box-shadow:inset 0 2px 4px rgba(0,0,0,.5);   /* 카드가 담긴 홈 */
+    /* ★ v2.2 레일 — 좌우 스와이프. touch-action:pan-x 로 세로 스크롤과 안 싸우게 하고,
+       overscroll-behavior 로 끝에서 페이지가 딸려가는 것도 막는다.
+       scroll-snap 은 proximity — mandatory 로 두면 드래그가 자석에 끌려 뚝뚝 끊긴다. */
+    cursor:grab;user-select:none;-webkit-user-select:none;
+    touch-action:pan-x;overscroll-behavior-x:contain;
+    scroll-snap-type:x proximity;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 10px,#000 calc(100% - 14px),transparent 100%);
+            mask-image:linear-gradient(90deg,transparent 0,#000 10px,#000 calc(100% - 14px),transparent 100%)}
+  .orders.drag{cursor:grabbing;scroll-snap-type:none}
+  .orders.drag *{pointer-events:none}
+  .orders::-webkit-scrollbar{height:4px}
+  .orders::-webkit-scrollbar-track{background:transparent}
+  .orders::-webkit-scrollbar-thumb{background:#4d5678;border-radius:99px}
+  .ocard{flex:0 0 48px;scroll-snap-align:start;border:1px solid var(--line);border-radius:9px;
+    background:linear-gradient(180deg,#232734,#14161e);
+    box-shadow:var(--lipT),0 2px 0 rgba(0,0,0,.38);
+    padding:4px 3px;display:flex;flex-direction:column;align-items:center;gap:3px}
+  .ocard.dbl{flex:0 0 84px}
+  .omore{flex:0 0 auto;align-self:center;padding:0 9px;color:#6b7186;
+    font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .chiprow{display:flex;align-items:center;gap:4px}
+  /* 제출 가능 = 초록 발광 + 느린 맥박. 주변시로 잡히게 하는 게 목적 */
+  .ocard.rdy{border-color:var(--ok);background:linear-gradient(180deg,#1e3a2c,#132018);
+    box-shadow:var(--glowOk),0 2px 0 rgba(0,0,0,.38);animation:rdyPulse 1.5s ease-in-out infinite}
+  @keyframes rdyPulse{0%,100%{box-shadow:0 0 0 1px rgba(110,231,168,.45),0 0 10px rgba(110,231,168,.20),0 2px 0 rgba(0,0,0,.38)}
+    50%{box-shadow:0 0 0 1px rgba(110,231,168,.75),0 0 18px rgba(110,231,168,.42),0 2px 0 rgba(0,0,0,.38)}}
+  .ochip{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;
+    justify-content:center;font-weight:800;font-size:10px;color:#0d0f16}
+  .obtn{width:40px;padding:3px 0;border-radius:6px;border:0;background:#262a38;
+    color:#5c6072;font-size:9px;font-weight:800;transition:transform .08s}
+  .obtn.on{color:#0b1d13;background:linear-gradient(180deg,#8df3bf,#4bc98a);
+    box-shadow:0 2px 0 #2b7d55,0 3px 6px rgba(0,0,0,.4);text-shadow:0 1px 0 rgba(255,255,255,.35)}
+  .obtn.on:active{transform:translateY(2px);box-shadow:0 0 0 #2b7d55}
+
+  /* ── 보드 + 열버튼 (붙임) ── */
+  #boardWrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+  /* 알이 "안에 담긴" 우물처럼 — 안쪽 깊은 그림자 + 바깥쪽 큰 그림자 */
+  #boardBox{background:linear-gradient(180deg,#101219,#181b25);border:1px solid #2e3346;border-top:0;
+    border-radius:0 0 14px 14px;padding:5px;display:flex;flex-direction:column;gap:6px;
+    min-height:0;align-self:center;position:relative;
+    box-shadow:inset 0 6px 14px -6px rgba(0,0,0,.85), inset 0 -1px 0 rgba(255,255,255,.05),
+               0 10px 30px -8px rgba(0,0,0,.7)}
+  /* 위가 열려 있다는 신호 — 상단으로 갈수록 옅어진다 */
+  #boardBox::before{content:'';position:absolute;left:-1px;right:-1px;top:-22px;height:24px;
+    background:linear-gradient(180deg,transparent,#101219);pointer-events:none}  /* 보드 배경색과 정합 */
+  /* 좌우 벽은 위로 올라가며 사라진다 — "위가 뚫려 있다"를 실제로 보이게 */
+  #boardBox::after{content:'';position:absolute;left:-1px;right:-1px;top:-22px;height:24px;
+    border-left:1px solid #2e3346;border-right:1px solid #2e3346;pointer-events:none;
+    -webkit-mask:linear-gradient(180deg,transparent,#000);mask:linear-gradient(180deg,transparent,#000)}
+  #board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
+    grid-template-rows:repeat(6,minmax(0,1fr));gap:4px}
+  /* 숫자가 알의 주인공 — 셀 대비 확실히 크게. 입체·색·글자색은 전부 tone()이 인라인으로 넣는다 */
+  .cell{border-radius:8px;background:#191c26;display:flex;align-items:center;
+    justify-content:center;font-weight:900;font-size:28px;letter-spacing:-.5px;
+    font-variant-numeric:tabular-nums;color:#0d0f16;position:relative;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.45)}   /* 빈 칸 = 파인 홈 */
+  .cell.sm{font-size:21px;letter-spacing:-1px}   /* 3자리 128~512 */
+  .cell.xs{font-size:16px;letter-spacing:-1.2px} /* 4자리 1024 */
+  .cell[style]{border-radius:9px}
+  .cell.alt{background:#0e1017}          /* 열이 눈에 잡히도록 교차 — 대비 상향 */
+  .cell.top{box-shadow:inset 0 2px 0 -1px #2b3143}
+  .cell.drop{animation:fall .16s cubic-bezier(.35,0,.55,1)}
+  @keyframes fall{from{transform:translateY(var(--fd))}to{transform:translateY(0)}}
+  .cell.mg{animation:mg .3s cubic-bezier(.34,1.4,.64,1);z-index:3}
+  @keyframes mg{0%{transform:scale(.84);filter:brightness(1.75)}
+    42%{transform:scale(1.15);filter:brightness(1.3)}
+    100%{transform:scale(1);filter:brightness(1)}}
+  .cell.mg::after{content:'';position:absolute;inset:-6px;border-radius:14px;
+    background:radial-gradient(circle,rgba(255,255,255,.5) 0%,rgba(255,255,255,.14) 45%,transparent 70%);
+    animation:glow .42s ease-out forwards;pointer-events:none}
+  @keyframes glow{0%{opacity:.95;transform:scale(.65)}100%{opacity:0;transform:scale(1.55)}}
+  .cell.absorb{animation:absorb .16s ease-in forwards;z-index:2}
+  @keyframes absorb{to{transform:translate(var(--ax,0),var(--ay,0)) scale(.35);opacity:.15}}
+  .cell.pick{outline:2px solid var(--ok);outline-offset:-2px}
+  .cell.ship{animation:ship .55s cubic-bezier(.4,0,.2,1) forwards;z-index:5}
+  @keyframes ship{0%{transform:translateY(0) scale(1);opacity:1}
+    100%{transform:translateY(-42vh) scale(.45);opacity:0}}
+  .bstack{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:9px;min-height:0}
+  /* ★ v2.4 버그수정 — 첫 드롭 때 보드가 7.5px 내려앉던 문제.
+     원인: .bstack 이 justify-content:center 인데 힌트가 height:0 으로 접히면서
+     스택 높이가 15px 줄고, 중앙 정렬이라 그 절반(7.5px)만큼 보드가 밀렸다.
+     "사라진 뒤 자리를 회수한다"가 바로 원인이었다 — 회수하는 순간 위치가 움직인다.
+     자리는 그대로 두고 투명도만 끈다. 보드 아래 15px 빈 띠는 눈에 안 띄지만
+     첫 드롭에 판이 흔들리는 건 보인다. 어느 쪽이 나쁜지는 분명하다. */
+  #boardHint{text-align:center;font-size:11.5px;flex:0 0 auto;
+    height:15px;line-height:15px;
+    font-weight:800;color:#7a819a;pointer-events:none;
+    animation:hintPulse 1.9s ease-in-out infinite;transition:opacity .35s}
+  #boardHint.gone{opacity:0;animation:none}   /* height·margin 은 절대 건드리지 않는다 */
+  @keyframes hintPulse{0%,100%{opacity:.55}50%{opacity:1}}
+  .cell.colhi{background:#232838}
+  .cell.blocked{animation:shake .3s}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}
+    75%{transform:translateX(4px)}}
+
+  /* ── 하단 ── */
+  .nextpane{flex:0 0 33%;border:1px solid #333a4d;border-radius:11px;
+    background:linear-gradient(180deg,#20232f,#171923);box-shadow:var(--lipT),var(--lipB);
+    padding:5px 6px;display:flex;flex-direction:column;justify-content:center;gap:3px}
+  .nwrap{display:flex;align-items:center;justify-content:center;gap:7px}
+  .nlab{font-size:9.5px;color:var(--dim);font-weight:800;letter-spacing:.5px;text-align:center}
+  .nx1{width:46px;height:46px;border-radius:11px;display:flex;align-items:center;
+    justify-content:center;font-weight:800;color:#0d0f16;font-size:16px;
+    box-shadow:0 3px 12px rgba(0,0,0,.5);position:relative}
+  .nx1::after{content:'';position:absolute;inset:-4px;border-radius:14px;padding:2px;
+    background:linear-gradient(90deg,#ffd166,#ff9f43,#fff0c2,#ffd166);
+    background-size:220% 100%;animation:flow 1.9s linear infinite;
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    mask-composite:exclude;pointer-events:none}
+  @keyframes flow{to{background-position:-220% 0}}
+  .nx2{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;
+    justify-content:center;font-weight:800;color:#0d0f16;font-size:10px;opacity:.6}
+  .items{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;flex:0 0 auto;
+    margin-top:8px;padding-top:10px;padding-bottom:7px;border-top:2px solid #2b3143;
+    box-shadow:0 -10px 20px -14px rgba(0,0,0,.9)}
+  /* 이름 제거 → 아이콘이 주인공. 개수는 우상단 배지 */
+  .item{padding:11px 1px;border-radius:12px;border:1px solid var(--line);
+    background:linear-gradient(180deg,#242835,#171a24);
+    box-shadow:var(--lipT),var(--drop);transition:transform .08s,box-shadow .08s;
+    display:flex;align-items:center;justify-content:center;position:relative}
+  .item:active{transform:translateY(2px);box-shadow:var(--lipT)}
+  .item svg{width:30px;height:30px}
+  /* 보유 개수 = 우하단 원형 배지. 버튼 모서리에 걸쳐 앉아 버튼과 분리돼 읽힌다.
+     0도 항상 표시 — 있다가 없어지면 자리가 흔들려서. 0은 죽여두고 1+만 색을 준다 */
+  .ilock{position:absolute;bottom:-7px;right:-6px;min-width:21px;height:21px;padding:0 5px;
+    border-radius:99px;display:flex;align-items:center;justify-content:center;
+    font-size:11.5px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1;
+    background:#20232d;color:#565b6e;border:2.5px solid #12131a;
+    box-shadow:0 1px 3px rgba(0,0,0,.6)}
+  .ilock.have{color:#0f1218;border-color:#12131a;
+    background:linear-gradient(180deg,var(--bg1,#8ec9ff),var(--bg2,#3f8fe0));
+    text-shadow:0 1px 0 rgba(255,255,255,.35);
+    box-shadow:0 1px 3px rgba(0,0,0,.6),0 0 9px var(--bg2,#3f8fe0)88}
+  .item.act{border-color:var(--ok);background:#16241d}
+  /* ★ v2.3 — 아이템 안내바는 아이콘 줄 "위에 겹쳐서" 뜬다.
+     예전엔 보드와 아이콘 사이에 한 줄이 끼어들어 전체 높이가 바뀌었고,
+     fitBoard()가 다시 돌면서 보드가 작아졌다 커졌다 했다.
+     겹치면 레이아웃 높이가 그대로라 보드는 1px도 안 움직인다.
+     아이콘을 숨기는 건 덤이 아니라 목적이다 — 고르는 중엔 다른 아이템이 선택지가 아니다. */
+  .itemzone{position:relative;flex:0 0 auto}
+  .itemzone.picking .items{visibility:hidden}
+  #itembar{display:none;position:absolute;left:0;right:0;bottom:7px;top:12px;
+    align-items:center;gap:8px;padding:0 12px;border-radius:12px;
+    background:#16241d;border:1px solid var(--ok);
+    box-shadow:0 0 0 1px rgba(110,231,168,.18),0 6px 18px -8px rgba(0,0,0,.8);z-index:6}
+  #itembar.on{display:flex}
+  #itembar .msg{flex:1;font-size:12.5px;font-weight:800;color:var(--ok);line-height:1.35}
+  #itembar button{padding:5px 12px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel);color:var(--dim);font-size:11px;font-weight:800}
+
+  /* ── 모달 ── */
+  #ov{position:fixed;inset:0;z-index:80;background:#0b0c11;
+    display:none;align-items:center;justify-content:center;padding:16px}
+  #ov.on{display:flex}
+  /* 딤드 모드 — 화면 전환이 아니라 "판 위에 얹힌 창". 보드가 비쳐야 판단이 이어진다 */
+  #ov.dim{background:rgba(8,9,14,.76);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  /* 딤 위로 띄우는 건 우측 상단 보유 골드 하나뿐 — 살 수 있는지가 여기서 결정되므로 */
+  .gemrow.raise,
+  .gold.raise{position:relative;z-index:90;pointer-events:none;
+    background:rgba(24,26,36,.92);border:1px solid #2b3040;border-radius:10px;padding:5px 10px;
+    box-shadow:var(--lipT),0 6px 18px rgba(0,0,0,.5);flex:0 0 auto;align-self:stretch}
+  /* 팝업 하단 버튼 행 — 구매/사용과 닫기의 높이를 강제로 맞춘다 */
+  .prow{display:flex;gap:8px;justify-content:center;align-items:stretch;margin-top:4px}
+  /* ⚠ 클래스명 .pbtn 은 펫 카드 버튼이 선점하고 있다. 모달 버튼은 .mbtn */
+  .mbtn{height:46px;padding:0 26px;border-radius:99px;border:0;font-size:15px;font-weight:800;
+    display:inline-flex;align-items:center;justify-content:center;line-height:1;flex:0 0 auto}
+  .mbtn.use{background:var(--txt);color:#12131a}
+  .mbtn.use:active{transform:scale(.97)}
+  .mbtn.close{background:transparent;border:1px solid var(--line);color:var(--dim);
+    font-size:14px;font-weight:700;padding:0 22px}
+  .sheet{width:100%;max-width:400px;text-align:center;max-height:92dvh;overflow-y:auto}
+  /* 결과·규칙처럼 '사건'인 창은 판이 비치면 안 된다. 불투명 패널로 확실히 덮는다 */
+  .sheet.panel{background:linear-gradient(180deg,#1e2130,#14161f);
+    border:1px solid #333a4d;border-radius:22px;padding:26px 18px 22px;
+    min-height:62dvh;display:flex;flex-direction:column;justify-content:center;gap:2px;
+    box-shadow:0 26px 70px -18px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.06)}
+  #ov.solid{background:rgba(6,7,11,.93);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .big{font-size:32px;font-weight:800;margin:0 0 4px;font-variant-numeric:tabular-nums}
+  .sub{font-size:13px;color:var(--dim);margin:0 0 20px;line-height:1.55}
+  .now{padding:14px 40px;border-radius:99px;background:var(--txt);color:#12131a;
+    font-size:16px;font-weight:800;border:0}
+  .now:active{transform:scale(.97)}
+  .ghost{margin-top:8px;padding:10px 20px;border-radius:99px;background:transparent;
+    border:1px solid var(--line);color:var(--dim);font-size:13px;font-weight:700}
+  .hint{font-size:11px;color:#5c6072;margin-top:14px;line-height:1.55}
+  .buy{padding:12px 28px;border-radius:99px;background:var(--gold);color:#2a1f00;
+    font-size:14px;font-weight:800;border:0;opacity:.45;line-height:1.35}
+  .buy.able{opacity:1;box-shadow:0 3px 0 #a8823a,0 5px 12px rgba(0,0,0,.45)}
+  .buy.able:active{transform:translateY(2px);box-shadow:0 1px 0 #a8823a}
+  .mbtn.buy{padding:0 26px;font-size:16px;line-height:1;letter-spacing:.3px}
+  /* 두 선택지가 대등할 때 — 폭까지 같아야 '고르는 화면'으로 읽힌다 */
+  .mbtn.eq{flex:1 1 0;min-width:0;padding:0 8px;font-size:14px}
+  .mrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+  .mrow button{flex:1 1 auto;min-width:88px;padding:11px 6px;border-radius:10px;
+    background:var(--panel);white-space:nowrap;
+    border:1px solid var(--line);color:var(--txt);font-size:11px;font-weight:700}
+  .mrow button:active{background:#262a38}
+
+  /* 펫 카드 2x2 */
+  .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .pcard{background:var(--panel);border:1px solid var(--line);border-radius:13px;
+    padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:5px}
+  .pcard.lock{opacity:.34}
+  .pmeta{display:flex;align-items:center;gap:5px}
+  .pname{font-size:12px;font-weight:800}
+  .pbtn{width:100%;padding:6px;border-radius:8px;border:1px solid var(--line);
+    background:transparent;color:var(--dim);font-size:10px;font-weight:800}
+  .pbuy{width:100%;padding:7px;border-radius:8px;border:0;background:#2a2d3a;
+    color:#5c6072;font-size:10px;font-weight:800}
+  .pbuy.on{background:var(--ok);color:#0d1a13}
+
+  /* 확률표 */
+  /* 표 자체는 중앙에 두되, 셀 안 내용의 왼쪽 끝을 맞춘다 (sheet의 text-align:center 상속 차단) */
+  .ptab{width:auto;min-width:210px;border-collapse:collapse;font-size:12px;margin:6px auto 0}
+  .ptab td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left}
+  .ptab td:first-child{white-space:nowrap}
+  .ptab .vnum{display:inline-block;min-width:44px;text-align:left;
+    font-variant-numeric:tabular-nums;font-weight:800}
+  .ptab td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:800;
+    min-width:52px}
+  .z{color:#3f4557}
+  .nz{color:#fff}
+
+  /* ── 인게임 가이드 ──
+     제출용 실행 가이드(HTML)와 같은 원본(guide_data.mjs)에서 굽는다. 컷씬만 뺐다 —
+     이미 게임 안이라 스크린샷이 필요 없고, base64 580KB를 얹으면
+     "파일 하나로 도는 프로토"라는 성질이 없어진다. */
+  #guide{position:fixed;inset:0;z-index:95;background:#0b0c11;display:none;flex-direction:column}
+  #guide.on{display:flex}
+  #guide header{display:flex;align-items:center;gap:10px;padding:13px 16px;
+    border-bottom:1px solid #1c2130;flex:0 0 auto}
+  #guide header h1{flex:1;margin:0;font-size:14.5px;font-weight:900;letter-spacing:-.02em;min-width:0}
+  #guide header h1 small{display:block;font-size:9px;font-weight:800;color:var(--dim);
+    letter-spacing:.16em;margin-bottom:1px}
+  #guide header h1 span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gdots{display:flex;gap:5px;flex:0 0 auto}
+  .gdot{width:6px;height:6px;border-radius:99px;background:#2e3446;transition:.15s}
+  .gdot.on{background:#a99bff;transform:scale(1.3)}
+  .gx{flex:0 0 auto;width:30px;height:30px;border-radius:99px;border:1px solid var(--line);
+    background:#1a1e29;color:#9aa1ae;font-size:13px;font-weight:800}
+  /* 스크롤바 — 기본 회색 막대는 어두운 판에서 유일하게 밝은 덩어리라 시선을 뺏는다.
+     폭을 줄이고 트랙을 지운 뒤, 손이 닿을 때만 또렷해지게 */
+  #gdMain{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 16px 22px;
+    scrollbar-width:thin;scrollbar-color:#39405a transparent}
+  /* ── 스크롤 : 셸과 같은 한 벌 ── */
+  #gdMain,#sheet,.sheet,.scr{scrollbar-width:thin;scrollbar-color:#4d5678 rgba(255,255,255,.04)}
+  #sheet::-webkit-scrollbar,.sheet::-webkit-scrollbar,.scr::-webkit-scrollbar{width:8px}
+  #sheet::-webkit-scrollbar-track,.sheet::-webkit-scrollbar-track,.scr::-webkit-scrollbar-track{
+    background:rgba(255,255,255,.035);border-radius:99px;margin:4px 0}
+  #sheet::-webkit-scrollbar-thumb,.sheet::-webkit-scrollbar-thumb,.scr::-webkit-scrollbar-thumb{
+    background:linear-gradient(180deg,#606b95,#3b4363);border-radius:99px;
+    border:2px solid transparent;background-clip:content-box;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+  #gdMain::-webkit-scrollbar{width:9px}
+  #gdMain::-webkit-scrollbar-track{background:rgba(255,255,255,.035);border-radius:99px}
+  #gdMain::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#606b95,#3b4363);border-radius:99px;
+    border:3px solid transparent;background-clip:content-box}
+  #gdMain::-webkit-scrollbar-thumb:hover{background:#4a5273;background-clip:content-box}
+  #guide footer{display:flex;align-items:center;gap:10px;padding:11px 16px;
+    border-top:1px solid #1c2130;flex:0 0 auto}
+  .gnav{padding:10px 16px;border-radius:10px;border:1px solid #2b3143;background:#171b27;
+    color:#c2c7d6;font-size:13px;font-weight:800}
+  .gnav:disabled{opacity:.3}
+  .gnav.pri{background:linear-gradient(180deg,#eceefa,#c9cee2);color:#12151f;border-color:#c9cee2}
+  .gcnt{flex:1;text-align:center;font-size:12px;color:#6b7186;font-weight:800}
+  .gph{display:flex;align-items:center;gap:9px;margin-bottom:13px}
+  .gbadge{width:28px;height:28px;border-radius:8px;background:#a99bff;color:#180f33;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+  .gph h2{flex:1;margin:0;font-size:18px;letter-spacing:-.03em}
+  #gdBody{font-size:15px;line-height:1.68;color:#ccd1de;max-width:1040px;margin:0 auto}
+  #gdBody .lead{font-size:15.5px;color:#e2e5ee;margin:0 0 14px}
+  /* 컷씬 — 폭이 좁아서 두 장이면 벌써 꽉 찬다. 가로 스크롤로 두고 스크롤바는 숨긴다 */
+  /* 본문 배치 — 제출용 가이드와 같은 규칙.
+     넓으면 컷씬이 왼쪽에 서고 글이 오른쪽으로 흐른다. 좁아지면 컷씬이 위로 올라가
+     한 줄에 글이 통째로 들어온다. 폭이 바뀌어도 읽는 순서가 안 꼬인다. */
+  .gpb{display:flex;gap:22px;align-items:flex-start}
+  .gpb.full{display:block}
+  .gtxt{flex:1;min-width:0}
+  .gcuts{display:flex;gap:10px;flex:0 0 auto;scrollbar-width:none;
+    padding-bottom:2px;-webkit-overflow-scrolling:touch}
+  .gcuts::-webkit-scrollbar{display:none}
+  .gcuts figure{margin:0;flex:0 0 auto;text-align:center}
+  .gcuts img{width:176px;border-radius:10px;border:1px solid #262c3c;display:block;
+    box-shadow:0 8px 24px -12px #000}
+  .gcuts figcaption{font-size:11px;color:#767d94;font-weight:700;margin-top:6px}
+  @media (max-width:760px){
+    .gpb{flex-direction:column;gap:0}
+    /* 좁아지면 컷씬이 위로. safe 를 붙여야 넘칠 때 왼쪽이 잘려서 못 보는 일이 안 생긴다 */
+    .gcuts{align-self:stretch;margin:0 0 16px;overflow-x:auto;
+      justify-content:center;justify-content:safe center}
+    .gcuts img{width:164px}
+  }
+  #gdBody .cal{border-left:3px solid #a99bff;background:#171429;border-radius:0 8px 8px 0;
+    padding:12px 14px;margin:0 0 14px;font-size:14.5px;color:#d5cdff}
+  #gdBody .warn{border-left:3px solid var(--gold);background:#221c10;border-radius:0 8px 8px 0;
+    padding:12px 14px;margin:14px 0 0;font-size:13.5px;color:#ecdcb8}
+  /* 라벨 + 문장. flex 로 두면 <b> 가 각각 flex 아이템이 돼서 한 문장이 칸으로 쪼개진다 */
+  #gdBody .kv{display:flex;flex-direction:column;gap:11px}
+  #gdBody .kv>div{position:relative;padding-left:68px;font-size:14.2px;line-height:1.6}
+  #gdBody .kv span{position:absolute;left:0;top:2px;width:60px;font-size:11.5px;
+    font-weight:900;color:#8f97ad}
+  #gdBody b{color:#fff}
+  #gdBody code{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;background:#1b1f2c;
+    padding:2px 6px;border-radius:4px;color:#b3bcd2}
+  #gdBody .ok{color:var(--ok)} #gdBody .bad{color:#ff6b6b} #gdBody .gem{color:#8ad8ff}
+  #gdBody table{width:100%;border-collapse:collapse;font-size:13px;margin:0 0 12px}
+  #gdBody th{background:#171b27;border:1px solid #262c3c;padding:7px 8px;text-align:left;
+    font-weight:800;color:#b6bdcf;font-size:11.5px}
+  #gdBody td{border:1px solid #212635;padding:7px 8px;vertical-align:top}
+  /* 좁은 화면에서 첫 칸(이름)과 가격이 두 줄로 쪼개지면 표가 아니라 문단으로 보인다 */
+  #gdBody table:not(.wide) td:first-child,
+  #gdBody table:not(.wide) th:first-child{white-space:nowrap}
+  #gdBody td.gem{white-space:nowrap;text-align:center}
+  #gdBody table.wide td,#gdBody table.wide th{text-align:center;padding:5px 2px;font-size:11px}
+  #gdBody table.wide td:nth-child(4),#gdBody table.wide th:nth-child(4){text-align:left}
+  #gdBody td.hi{color:#fff;font-weight:800;background:#1a2030}
+  #gdBody td.ft{background:#12151f;color:#8189a0;font-weight:800}
+  #gdBody .two{display:flex;gap:14px;align-items:flex-start}
+  #gdBody .two>table{flex:1}
+  @media (max-width:760px){ #gdBody .two{flex-direction:column;gap:0} }
+  #gdBody .cap{font-size:12px;color:#7a8199;margin:-4px 0 16px;line-height:1.55}
+
+  /* 로비 */
+  #lobby{position:fixed;inset:0;z-index:70;background:var(--bg);display:none;
+    flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px}
+  #lobby.on{display:flex}
+  .ltitle{font-size:22px;font-weight:900;letter-spacing:-.5px;margin-bottom:2px}
+  .lsub{font-size:11px;color:var(--dim);margin-bottom:14px}
+  /* 재화는 문장이 아니라 칩으로. "골드 5000 · 💎 20" 같은 한 줄은 읽어야 하지만
+     칩은 안 읽어도 보인다. 살 수 있나/없나를 판단하는 값이라 시선 비용이 낮아야 한다 */
+  .lchips{display:flex;gap:7px;margin-bottom:9px}
+  .lchip{display:flex;align-items:center;gap:5px;padding:5px 11px 5px 9px;border-radius:99px;
+    border:1px solid var(--line);background:linear-gradient(180deg,#232735,#181b25);
+    box-shadow:var(--lipT),0 2px 0 rgba(0,0,0,.35)}
+  .lchip b{font-size:13px;font-weight:900;font-variant-numeric:tabular-nums}
+  .lchip.gold b{color:#ffd98a}
+  .lchip.gem  b{color:#8ad8ff}
+  .lcard{width:min(74vw,272px);aspect-ratio:1;border-radius:20px;
+    background:linear-gradient(160deg,#1e2233,#171a26);border:1px solid #333a52;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    box-shadow:0 8px 28px rgba(0,0,0,.45);position:relative}
+  .lcard:active{transform:scale(.985)}
+  .lcard .st{font-size:13px;color:var(--dim);font-weight:800;letter-spacing:1.5px}
+  .lcard .num{font-size:64px;font-weight:900;line-height:1}
+  .lcard .pick{position:absolute;bottom:14px;font-size:10.5px;color:#5c6072;font-weight:700}
+  .lrow{display:flex;gap:8px;width:min(74vw,272px)}
+  .lbtn{flex:1;padding:14px 6px;border-radius:12px;border:1px solid var(--line);
+    background:var(--panel);color:var(--txt);font-size:14px;font-weight:800}
+  .lbtn.pri{background:var(--txt);color:#12131a;border-color:var(--txt)}
+  .lbtn.wide{width:min(74vw,272px);flex:none}
+  .lbtn:active{transform:scale(.98)}
+  /* 아이콘 + 글자 버튼 — currentColor 라 pri/일반 어느 쪽이든 글자색을 따라간다 */
+  .lbtn.ico,.mrow button.ico{display:flex;align-items:center;justify-content:center;gap:6px}
+  .bico{width:15px;height:15px;flex:0 0 auto;opacity:.85}
+  .mrow button.ico .bico{width:13px;height:13px}
+  .slist{width:100%;max-height:52vh;overflow-y:auto;display:flex;flex-direction:column;
+    gap:6px;margin-top:6px}
+  .srow{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;
+    border-radius:11px;background:var(--panel);border:1px solid var(--line);color:var(--txt)}
+  .srow .sn{font-size:14px;font-weight:800;letter-spacing:.4px;text-align:left;
+    display:flex;flex-direction:column;gap:2px}
+  .srow .rq{font-size:9.5px;font-weight:700;color:#6b7186;letter-spacing:0}
+  .srow .rq b{font-weight:800}
+  .srow .rq b.lack{color:#ff6b6b}          /* 권장레벨 미달 펫만 붉게 */
+  .srow .sp{display:flex;gap:3px;align-items:center}
+  .srow.cur{background:#16241d;border-color:var(--ok)}
+  .srow.cur .sn{color:var(--ok)}
+  /* 미도달 = 회색 비활성. 자리는 그대로 두고 명도만 죽인다 */
+  .srow.lock{opacity:.34;filter:grayscale(1);cursor:default}
+  .srow.lock .sn{color:var(--dim)}
+  .srow .lk{font-size:11px;color:#5c6072;font-weight:800}
+
+  /* ══ 데스크톱 프레임 ══════════════════════════════════════════
+     세로 UI를 넓은 모니터에서 왼쪽 위에 붙여 두면 "덜 만든 모바일 페이지"로 읽힌다.
+     화면 중앙에 기기 프레임으로 앉히고, 남는 여백은 조작 안내로 채운다.
+     게임 로직은 건드리지 않는다 — 전부 배치 규칙이다. */
+  #deskside,#deskfoot{display:none}
+  @media (min-width:820px) and (min-height:700px) and (pointer:fine){
+    body{background:
+      radial-gradient(70% 55% at 50% 40%, #1e2233 0%, #14161f 45%, #0a0b10 100%),
+      var(--bg)}
+    #app,#edge,#lobby,#guide,#ov{
+      position:fixed;left:calc(50% + var(--shift,0px));top:50%;right:auto;bottom:auto;margin:0;
+      width:436px;max-width:none;
+      height:min(calc(100dvh - 64px),884px);
+      transform:translate(-50%,-50%);
+      border-radius:26px;overflow:hidden}
+    #app{background:linear-gradient(180deg,#15171f,#101119);
+      border:1px solid #272c3d;
+      box-shadow:0 30px 90px -30px rgba(0,0,0,.9),0 0 0 7px #0c0d12,0 0 0 8px #22283a}
+    #lobby,#guide{border:1px solid #272c3d;box-shadow:0 30px 90px -30px rgba(0,0,0,.9),
+      0 0 0 7px #0c0d12,0 0 0 8px #22283a}
+    #ov{box-shadow:0 0 0 7px rgba(12,13,18,.0)}
+    /* 좌측 안내판 — 심사·시연자가 첫 화면에서 조작을 알 수 있게 */
+    #deskside{display:block;position:fixed;top:50%;transform:translateY(-50%);
+      left:calc(50% + var(--shift,0px) - 218px - 300px);width:264px;z-index:60;pointer-events:none;
+      color:var(--dim);font-size:12.5px;line-height:1.7}
+    #deskside h2{margin:0 0 6px;font-size:26px;font-weight:900;letter-spacing:-.02em;
+      color:var(--txt)}
+    #deskside .dtag{font-size:11px;font-weight:800;letter-spacing:.18em;color:#5c6478;
+      margin-bottom:14px}
+    #deskside .drow{display:flex;gap:9px;margin-top:9px;align-items:flex-start}
+    #deskside .dk{flex:0 0 auto;min-width:52px;padding:2px 8px;border-radius:6px;
+      background:#1b1e29;border:1px solid var(--line);color:#aeb4c6;
+      font-size:10.5px;font-weight:800;text-align:center}
+    #deskside .dnote{margin-top:18px;padding-top:14px;border-top:1px solid #1e2230;
+      font-size:11.5px;color:#5c6478}
+    @media (max-width:1039px){ #deskside{display:none} }
+    /* 안내판이 뜨는 폭에서는 프레임을 오른쪽으로 밀어 '안내판 + 기기' 묶음을 중앙에 둔다.
+       안 밀면 기기만 중앙이고 오른쪽 절반이 통째로 빈다 */
+    @media (min-width:1040px){ :root{ --shift:150px } }
+    @media (min-width:1600px){ :root{ --shift:170px } }
+    /* 넓지 않은 데스크톱에는 프레임 아래에 한 줄로 */
+    #deskfoot{display:block;position:fixed;left:calc(50% + var(--shift,0px));transform:translateX(-50%);
+      bottom:8px;z-index:60;pointer-events:none;
+      font-size:11px;color:#4b5165;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+    @media (min-width:1040px){ #deskfoot{display:none} }
+    /* 셸(스낵바) 안에서는 기기 프레임·안내판을 끈다.
+       한쪽만 프레임이면 사냥터로 들어갈 때 레이아웃이 통째로 점프한다 */
+    html.embed #deskside,html.embed #deskfoot{display:none!important}
+    html.embed body{background:
+      radial-gradient(120% 62% at 50% 34%, #1d2030 0%, #14161f 46%, #0d0e14 100%),var(--bg)}
+    html.embed #app,html.embed #edge,html.embed #lobby,html.embed #guide,html.embed #ov{
+      position:absolute;left:0;right:0;top:0;bottom:0;margin:0 auto;
+      width:auto;max-width:440px;height:100dvh;transform:none;
+      border:0;border-radius:0;box-shadow:none}
+    /* 가이드 본문 — 뷰포트는 넓지만 실제 글 칸은 프레임 안 404px 뿐이다.
+       폭 기준 미디어쿼리(760px)가 여기선 안 걸려서 컷 옆에 글이 한 글자씩 서 버린다.
+       프레임 모드에서는 항상 컷을 위로 올리고 글을 아래 한 덩어리로 둔다. */
+    .gpb{flex-direction:column;gap:0}
+    .gcuts{align-self:stretch;margin:0 0 16px;overflow-x:auto;
+      justify-content:center;justify-content:safe center}
+    .gcuts img{width:168px}
+    /* 마우스 환경 힌트 — 누를 수 있는 것에 커서를 준다 */
+    button,.lcard,.srow,.pcard,#board,#board *{cursor:pointer}
+    .srow.lock{cursor:default}
+  }
+
+ /* ── 임베드(스낵바 셸 안) ── */
+ html.embed #lobby,html.embed .lobbyBtn{display:none!important}
+ /* 임베드에선 영상 자리를 끄고 그 자리에 사냥터 이름을 넣는다 — 영상 컨셉은 폐기됐다 */
+ html.embed #pipHint{display:none}
+ #huntName{display:none}
+ html.embed #huntName{display:block;position:absolute;top:8px;left:0;right:0;text-align:center;
+   font-size:12.5px;font-weight:900;color:#cfd4e4;letter-spacing:.02em}
+ html.embed #cfgTop{display:none}
+ html.embed #stageTop{visibility:hidden}
+ .h3{display:flex;gap:8px}
+ .hc{flex:1;background:#1b1e29;border:1px solid #2a2d3a;border-radius:13px;padding:14px 6px 16px;
+   text-align:center;display:flex;flex-direction:column;min-height:214px}
+ .hn{font-size:10px;font-weight:900;color:#5c6478;margin-bottom:12px}
+ .hz{display:flex;align-items:center;justify-content:center;gap:2px;min-height:38px}
+ .hc .ht{margin-top:auto}
+ .lrail{display:flex;gap:5px;overflow-x:auto;padding:0 0 6px;margin-bottom:14px;
+   scrollbar-width:thin;scrollbar-color:#4d5678 transparent}
+ /* ⚠ display:block 을 명시해야 한다. 위쪽 HUD 의 .lchip 이 display:flex 라
+    여기서 안 덮으면 세로 카드가 아니라 가로로 눕고 이름이 잘린다 */
+ .lchip{display:block;flex:0 0 78px;background:#20242f;border:1px solid #2a2d3a;border-radius:12px;
+   padding:8px 4px 9px;text-align:center;line-height:1.3}
+ .lchip i{display:block;font-size:9.5px;font-weight:900;font-style:normal}
+ .lchip em{display:block;font-size:26px;font-style:normal;margin:3px 0 2px;line-height:1}
+ .lchip b{display:block;font-size:11.5px;font-weight:800;color:#cfd4e4;white-space:nowrap;
+   overflow:hidden;text-overflow:ellipsis}
+ .lchip u{display:block;font-size:14px;font-weight:900;color:#ffd166;text-decoration:none;margin-top:2px}
+ .hord{display:inline-flex;flex-direction:column;align-items:center;gap:3px;
+   background:#1d3a2b;border:1.5px solid #6ee7a8;border-radius:9px;padding:5px 7px 6px;
+   box-shadow:0 0 0 3px rgba(110,231,168,.13)}
+ .hoc{display:inline-flex;min-width:30px;height:26px;padding:0 4px;border-radius:6px;
+   background:linear-gradient(180deg,#68b4ff,#3d8ee0);color:#0d1420;align-items:center;
+   justify-content:center;font-size:11px;font-weight:900}
+ .hob{font-size:9.5px;font-weight:900;color:#9fe8c8;line-height:1}
+ .hblk{display:inline-flex;min-width:27px;height:27px;padding:0 4px;border-radius:8px;
+   background:linear-gradient(180deg,#68b4ff,#3d8ee0);color:#0d1420;
+   align-items:center;justify-content:center;font-size:11px;font-weight:900;
+   box-shadow:inset 0 -2px 0 rgba(0,0,0,.22)}
+ .hblk.big{min-width:34px;height:34px;font-size:12.5px}
+ .ha{color:#ffd166;font-size:14px;font-weight:900;margin:0 1px}
+ .hv{color:#ffd166;font-size:13px;font-weight:900;margin:5px 0}
+ .hsub{display:inline-flex;background:#2d5b41;border:1px solid #6ee7a8;border-radius:8px;
+   padding:6px 12px;font-size:11px;font-weight:900;color:#9fe8c8}
+ .ht{margin-top:11px;font-size:11px;font-weight:700;color:#aeb4c6;line-height:1.45}
+ .ht b{color:#e8e9ef}
+ @keyframes hpulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(169,155,255,.6)}
+   50%{transform:scale(1.18);box-shadow:0 0 0 7px rgba(169,155,255,0)}}
+ #helpTop.pulse{animation:hpulse .5s ease 2}
+</style>
+<style>
+  #standalone{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;
+    padding:24px;background:radial-gradient(120% 90% at 50% 0%,#1b2030 0%,#0b0c11 70%);
+    font-family:inherit;text-align:center}
+  html.solo #standalone{display:flex}
+  html.solo body>*:not(#standalone){display:none!important}
+  #standalone .sabox{max-width:320px}
+  #standalone .saic{font-size:54px;line-height:1;margin-bottom:12px}
+  #standalone .satl{font-size:22px;font-weight:900;letter-spacing:-.02em;color:#fff;margin-bottom:8px}
+  #standalone .sasb{font-size:13px;line-height:1.7;color:#9aa0b4;margin-bottom:20px}
+  #standalone .sasb b{color:#ffd166}
+  #standalone .sabtn{display:block;padding:13px;border-radius:12px;text-decoration:none;
+    font-size:14px;font-weight:900;color:#221a05;
+    background:linear-gradient(180deg,#f2e7c9,#d9bd80);border:1px solid #c8ad74}
+  #standalone .safn{margin-top:12px;font-size:11px;color:#5f6478}
+  #standalone .safn code{background:#191c26;border:1px solid #2a2f3f;border-radius:4px;padding:1px 5px}
+</style>
+<script>
+  /* embed 해시 없이 열렸으면 게임 스크립트가 돌기 전에 잠근다 */
+  if(!window.__EMBED && (location.hash||'').indexOf('embed')<0)
+    document.documentElement.classList.add('solo');
+</script>
+</head>
+<body>
+<!-- 이 파일은 알 스낵바의 '사냥터' 씬이다. 단독 실행용이 아니다.
+     로비·스테이지 선택·골드 같은 옛 구조가 코드에 남아 있어서, 직접 열면
+     지금 게임과 다른 화면이 뜬다. embed 로 들어오지 않으면 여기서 막는다 -->
+<div id="standalone">
+  <div class="sabox">
+    <div class="saic">🍳</div>
+    <div class="satl">알 스낵바</div>
+    <div class="sasb">이 화면은 게임 안의 <b>사냥터</b>입니다.<br>단독으로는 실행할 수 없어요.</div>
+    <a class="sabtn" href="index.html">index.html 로 시작하기</a>
+    <div class="safn">같은 폴더의 <code>index.html</code> 을 열어 주세요</div>
+  </div>
+</div>
+<div id="edge"></div>
+
+<div id="lobby">
+  <div class="ltitle">rogueMerge</div>
+  <div class="lchips">
+    <span class="lchip gold"><svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"
+      fill="#ffd166"/><circle cx="12" cy="12" r="5.6" fill="none" stroke="#a8823a" stroke-width="1.4"/></svg>
+      <b id="lbGold">0</b></span>
+    <span class="lchip gem"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M6 3h12l4 6-10 12L2 9z"
+      fill="#8ad8ff" opacity=".92"/><path d="M6 3l-4 6h20l-4-6z" fill="#c9edff" opacity=".8"/></svg>
+      <b id="lbGem">0</b></span>
+  </div>
+  <div class="lsub" id="lobbyInfo">스테이지 1</div>
+  <div class="lcard" id="lbCard">
+    <span class="st">STAGE</span>
+    <span class="num" id="lbNum">1</span>
+    <span class="pick">탭하면 스테이지 선택</span>
+  </div>
+  <div class="lrow" id="lbRow">
+    <button class="lbtn pri" id="lbContinue">시작하기</button>
+    <button class="lbtn" id="lbNew">새로하기</button>
+  </div>
+  <div class="lrow">
+    <button class="lbtn" id="lbPets">펫 관리</button>
+    <button class="lbtn ico" id="lbGuide"><svg class="bico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 6.5h7"/></svg>가이드</button>
+  </div>
+</div>
+
+<div id="guide">
+  <header>
+    <h1><small>ROGUEMERGE</small><span id="gdTitle">가이드</span></h1>
+    <div class="gdots" id="gdDots"></div>
+    <button class="gx" id="gdClose">&#10005;</button>
+  </header>
+  <main id="gdMain"><div id="gdBody"></div></main>
+  <footer>
+    <button class="gnav" id="gdPrev">&#9664; 이전</button>
+    <span class="gcnt"><b id="gdCur">1</b> / <span id="gdTot">9</span></span>
+    <button class="gnav pri" id="gdNext">다음 &#9654;</button>
+  </footer>
+</div>
+
+<div id="app">
+  <div id="topbar">
+    <div class="side">
+      <div class="tag" id="goalTag">목표</div>
+      <div class="goalcol" id="goalGrid"></div>
+    </div>
+    <div id="pip">
+      <div id="pipHint"><div>영상 자리</div></div>
+      <div id="huntName"></div>
+      <div id="stageTop">STAGE <span id="stgN">1</span></div>
+      <div class="petrow" id="petRow"></div>
+      <div class="bubble" id="bubble">
+        <span class="bbox" id="bbox">- COMBO</span>
+        <i class="tail" id="tail"></i>
+      </div>
+    </div>
+    <div class="side" style="padding:5px" id="goldPane">
+      <button id="cfgTop" class="pausebtn">
+        <svg width="15" height="15" viewBox="0 0 24 24"><rect x="6" y="4" width="4.4" height="16"
+          rx="1.4" fill="#8b90a3"/><rect x="13.6" y="4" width="4.4" height="16" rx="1.4" fill="#8b90a3"/></svg>
+      </button>
+      <div class="embtn"><button id="helpTop">?</button><button id="exitTop">✕</button></div>
+      <div class="gold">
+        <svg width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"
+          fill="#ffd166"/><circle cx="12" cy="12" r="5.6" fill="none" stroke="#a8823a"
+          stroke-width="1.4"/></svg>
+        <span class="goldn" id="coin">0</span>
+      </div>
+      <div class="loot" id="lootPane">
+        <div class="llab">스테이지 보상</div>
+        <div class="lnum"><b id="lootN">0</b><i id="lootB"></i></div>
+        <div class="lmat" id="lootM"></div>
+      </div>
+      <div class="gemrow">
+        <svg width="12" height="12" viewBox="0 0 24 24"><path d="M6 3h12l4 6-10 12L2 9z"
+          fill="#8ad8ff" opacity=".92"/><path d="M6 3l-4 6h20l-4-6z" fill="#c9edff" opacity=".8"/></svg>
+        <span class="gemn" id="gemN">0</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="nextpane">
+      <div class="nlab">NEXT</div>
+      <div class="nwrap"><div class="nx1" id="nx1">2</div><div class="nx2" id="nx2">2</div></div>
+    </div>
+    <div class="orders" id="orders"></div>
+  </div>
+
+  <div id="boardWrap">
+    <div class="bstack">
+      <div id="boardBox">
+      <div id="board"></div>
+      </div>
+      <div id="boardHint">아무 칸이나 눌러 알을 떨어뜨리세요</div>
+    </div>
+  </div>
+
+  <div class="itemzone" id="itemzone">
+    <div class="items" id="items"></div>
+    <div id="itembar"><span class="msg" id="itemMsg"></span>
+      <button id="itemCancel">취소</button></div>
+  </div>
+</div>
+
+<div id="ov"><div class="sheet" id="sheet"></div></div>
+
+<aside id="deskside">
+  <div class="dtag">HTML5 DROP MERGE PUZZLE</div>
+  <h2>rogueMerge</h2>
+  <div>떨어뜨리고 · 합치고 · 납품한다.<br>세 동작으로 도는 한 손 퍼즐.</div>
+  <div class="drow"><span class="dk">클릭</span><span>보드의 열을 눌러 알을 떨어뜨린다</span></div>
+  <div class="drow"><span class="dk">같은 색·같은 수</span><span>맞닿으면 합쳐지며 한 단계 오른다</span></div>
+  <div class="drow"><span class="dk">주문</span><span>요구한 알을 만들면 납품 · 골드 획득</span></div>
+  <div class="drow"><span class="dk">M</span><span>소리 켜기 / 끄기</span></div>
+  <div class="dnote">전체 이용가 · 설치 불필요<br>PC · 모바일 브라우저 모두 지원</div>
+</aside>
+<div id="deskfoot">열을 클릭해 알을 떨어뜨리세요 · 같은 색·같은 수는 합쳐집니다 · M 키로 음소거</div>
+
+<script>
+/* ============================================================
+   rogueMerge — proto v2 (UI = v0.4 계승 / 룰·밸런스 = 확정본 적용)
+   · 상단 16:9 = 유튜브 PIP 자리. 가려져도 되는 것만 배치(펫 반응·콤보)
+   · 병합: 2개=+1 / 3개=+2 / 4개+=+3 · 열 내 낙하(열 간 이동 없음)
+   · 스테이지 1~10 = 확정 테이블(rogueMerge_BALANCE_수치_260804), 11+ = 절차 생성
+   · 펫 10레벨 · 아이템 골드 구매 · 다이아 · 되살아나기(죽은 알 제거)
+   · ★ δ 계측 내장 — 점유 = 드롭 − 머지제거 − 납품제거 (회계 항등식)
+   구현 안 함: 아트 폴리시, 사운드, 광고, 튜토리얼, IAP 결제
+   ============================================================ */
+const SEED=20260803;
+function mulberry32(a){
+  const f=function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+    t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+  f.get=()=>a; f.set=v=>{a=v};       // ★ SIM 1-ply 탐색용 스냅샷/롤백
+  return f;
+}
+let rng=mulberry32(SEED);
+
+/* ★ v2.4 — 머지 값 상한 제거 (2026-08-04 PM 결정).
+   MAXV 는 이제 "생성 가능한 최대 티어"(= DIST_B 행 길이)일 뿐이고, **머지 결과에는 상한이 없다.**
+   근거: 상한이 있으면 그 값에 도달한 알은 영영 안 합쳐지는 영구 데드셀이 된다.
+   보드가 30칸뿐이라 데드셀 1개는 δ를 3.3%p 올린다 — 상한은 난이도가 아니라 벌점이었다.
+   대신 값이 커질수록 자연히 짝을 못 만나 사실상의 소프트 천장이 생긴다(그게 정상적인 억제다).
+   ⚠ 상한을 없앴으므로 코드 어디에도 v 를 배열 인덱스로 그냥 쓰면 안 된다. 전부 클램프해서 조회할 것. */
+const COLS=5, ROWS=6;
+let GEN_VMAX=10;            // 펫이 "생성"할 수 있는 최대 티어 = 최고 펫 레벨 (동적)
+const genVmax=()=>Math.max(10, ...Object.values((typeof S!=='undefined'&&S&&S.lv)||{b:1}));
+const MAXV=GEN_VMAX;        // 하위 호환 별칭 — 생성 상한 의미로만 남긴다
+/* at = 그 펫이 "쓰이는" 스테이지 번호 = 그 색이 목표에 처음 나오는 판.
+   지급은 clearStage()에서 `p.at === S.stage+1` 로 하므로 실제 합류 순간은 **직전 판 클리어 시점**이다.
+   → 클리어 팝업/로비에서 레벨을 올리고 다음 판에 들어간다. 놀고 있는 판이 생기지 않는다.
+   ⚠ 2026-08-04에 이걸 3/6/8로 한 칸씩 당겼다가 되돌렸다. "합류 직후는 Lv1이라 권장 레벨을 못 맞춘다"는
+     판단이 오독이었다 — 합류는 판 진입 시가 아니라 이전 판 클리어 시라서 올릴 타이밍이 이미 있다.
+     당긴 결과 S3·S6·S8에서 새 펫이 목표에 없어 한 판을 놀았다. at 은 "첫 목표 등장 스테이지"와 항상 같게 둘 것. */
+const PETS=[
+  {k:'b',n:'파랑',hex:'#5aa9ff',at:1},
+  {k:'r',n:'빨강',hex:'#ff7a59',at:4},
+  {k:'g',n:'초록',hex:'#6ee08a',at:7},
+  {k:'y',n:'노랑',hex:'#ffd166',at:9},
+];
+/* 2^v. v가 무한이라 1<<v(32비트)로는 부족하다. 큰 값은 축약해서 칸에 넣는다 */
+const VNUM=v=>Math.pow(2,v);
+function VAL(v){
+  const n=VNUM(v);
+  if(n<10000) return String(n);
+  if(n<1e6)   return (n/1e3).toFixed(n<1e5?1:0).replace(/\.0$/,'')+'K';
+  if(n<1e9)   return (n/1e6).toFixed(n<1e8?1:0).replace(/\.0$/,'')+'M';
+  if(n<1e12)  return (n/1e9).toFixed(0)+'B';
+  return '2^'+v;
+}
+const LIGHT=[0,.28,.36,.44,.52,.60,.68,.76,.84,.92,1];
+/* 가격 = 30G × 실효 칸 수 (BALANCE_수치 §4-1) */
+/* ★ v2.3 — 재화를 다이아로 옮기고, 줄 삭제 2종을 "숫자 ±1단계"로 교체.
+   ① 재화 분리 : 골드 = 펫 성장, 다이아 = 판 구제. 하나의 지갑에서 둘 다 빼면
+      "성장을 포기하고 이번 판을 산다"가 매 판 반복돼서 메타가 서지 않는다.
+   ② 줄 삭제 폐기 : 가로/세로 한 줄을 날리는 건 보드를 넓히는 것이지 머지를 돕는 게 아니다.
+      싼값에 칸을 사는 우회로라 δ 설계를 통째로 무력화한다.
+      대신 ±1단계는 "합칠 수 있게 만드는" 도구다 — 옆 숫자와 맞추면 그 자리에서 연쇄가 터지고,
+      갇힌 큰 알은 내려서 다시 쓴다. 칸을 사는 게 아니라 머지를 사는 것.
+   cells = 그 아이템이 대략 벌어주는 칸 수(연쇄 포함 기대값) */
+/* ★ v2.4 (I-3) — cells 를 **추정에서 실측으로** 교체하고 가격을 다시 매겼다.
+   측정: SIM(=프로토 코어)에서 S6 26드롭 시점 보드에 각 아이템을 1-ply 전수 탐색으로
+   "가장 이득인 대상"에 적용하고, 연쇄까지 다 풀린 뒤 줄어든 점유 칸을 세었다(12판 평균).
+   플레이어는 최선의 칸을 고르므로 최적 대상이 맞는 기준이다.
+
+     키    구 명세  실측    구 가격 → 새 가격
+     del    1칸    3.67칸    💎1 → 💎2     ← 제거 하나가 연쇄를 터뜨린다. 3.7배 저평가였다
+     swp    2칸    5.08칸    💎2 → 💎3     ← 가장 강하다. 2.5배 저평가
+     up     4칸    3.17칸    💎5 → 💎2     ← 과대평가. 옆에 같은 값이 있어야만 값어치가 난다
+     dn     3칸    2.50칸    💎4 → 💎2     ← 과대평가
+     rbw    3칸    1.58칸    💎3 → 💎1     ← 절반. 색 제약만 풀 뿐 값이 안 맞으면 그대로 쌓인다
+
+   구 가격표는 순서가 실효값과 **거의 반대**였다 — 제일 싼 del 이 제일 강하고,
+   제일 비싼 up 이 중간이었다. 실효/가격 비를 1.25~1.84 대로 좁혔다.
+   ⚠ 실측은 "최적 대상"이라 상한이다. 평균 플레이어는 이보다 낮게 뽑는다. 상대 순서만 신뢰할 것. */
+const ITEMS=[
+  {k:'del',n:'알 제거',    gem:2, cells:3.7, d:'고른 알 하나를 없앱니다.'},
+  {k:'swp',n:'자리 교체',  gem:3, cells:5.1, d:'알 두 개의 자리를 서로 바꿉니다.'},
+  {k:'rbw',n:'무지개',     gem:1, cells:1.6, d:'다음 알이 무지개가 됩니다. 어떤 색과도 합쳐집니다.'},
+  {k:'up', n:'숫자 +1단계', gem:2, cells:3.2, d:'고른 알의 숫자를 한 단계 올립니다. 옆에 같은 숫자가 있으면 그 자리에서 합쳐집니다.'},
+  {k:'dn', n:'숫자 −1단계', gem:2, cells:2.5, d:'고른 알의 숫자를 한 단계 내립니다. 너무 커져서 갇힌 알을 다시 쓸 수 있게 만듭니다.'},
+];
+const GEM_PER_100G=1, REVIVE_GEM=3, REVIVE_REFUND_DROPS=5;
+/* ★ v2.2 — 납품 골드를 값이 아니라 "단계"에 건다.
+   기존: 골드 = 목표값. 그런데 목표값은 2^(펫최대 + 단계)라서 펫 레벨이 오르면
+   같은 노동에 골드가 2배씩 붙는다. 반대로 개당 드롭은 4.5 × 2^단계로 레벨과 무관하다.
+   → 초반 S² 스테이지(값은 16·32인데 개수는 16~36개)는 노동 대비 수입이 바닥이고,
+     후반은 남아돈다. 실측: S4 386드롭을 버티는 데 825G가 드는데 그 판 총수입이 416G.
+   고쳐서 골드 = GOLD_BASE × 2^단계. 단계는 "지금 그 색 펫이 뱉는 최대값 위로 몇 칸"이라
+   드롭 비용과 정확히 같은 축이다. 드롭당 수입이 스테이지·레벨과 무관하게 일정해진다.
+   펫을 올리면 그 주문의 단계가 내려가 골드도 같이 내려간다 — 노동이 줄었으니 맞다. */
+const GOLD_BASE=30;
+const MAXI_BY_LV=[0,4,4,4,5,5,6,7,8,9,10];   // DIST_B 각 레벨의 최대 등장 v (Lv1~10)
+/* 단계 기준은 "지금 내 펫"이 아니라 "그 스테이지의 권장 레벨"이다.
+   현재 레벨로 매기면 안 키운 유저가 같은 주문에 2배 골드를 받아서, 2배 걸리는 노동을
+   골드가 그대로 보상해 버린다 — 성장 압력이 0이 된다(실측: Lv1 고정 S5가 276드롭
+   걸리는데 골드도 2배로 들어와서 그냥 클리어됐다).
+   기준 레벨로 고정하면 안 키운 유저는 같은 돈에 2배 일하고, 키운 유저는 같은 돈에
+   절반만 일한다. 그게 펫에 돈을 쓰는 이유다. */
+function tierOf(c,v){
+  /* 기준은 "그 스테이지의 권장 레벨". 구버전은 rec을 6으로 클램프해서
+     S10 판당 골드가 문서값 3,810 대신 5,820이 나왔다(1.53배). */
+  const rec=Math.max(1, GM.recLv(S.stage, c) || 1);
+  const maxi = rec<=10 ? MAXI_BY_LV[rec] : rec;   // Lv11+ 는 MAXI == lv (창 연장 규칙)
+  return Math.max(0, v-maxi);
+}
+const goldOf=(c,v)=>GOLD_BASE*Math.pow(2,tierOf(c,v));
+/* ★ 펫 레벨별 알 등장 확률 — 하한형(B) 확정 (2026-08-04)
+   매칭 확률 = 같은 값이 두 번 뽑힐 확률 = Σp².  δ = 1 − p×r 에서 p ∝ Σp².
+     잔존형 Σp² : Lv1 .580 → Lv10 .272  (종류가 2→6개로 늘어 매칭이 절반으로 붕괴)
+     하한형 Σp² : 항상 2종 고정 → .50~.82 유지
+   → 잔존형은 강화할수록 δ가 오른다 = 돈 내고 어려워진다. 성장의 방향이 뒤집힌다.
+   영구 잠금은 하한 상승 자체가 아니라 "목표값 < 최소값"에서 생기므로,
+   목표값 ≥ min_v × 2 규칙으로 막는다 (STAGE_TABLE 최소 목표 16 ≥ Lv6 min 8 × 2 ✅).
+   A(잔존형)는 설정에 대조군으로만 남긴다. */
+const DIST_A=[ null,                          // idx=Lv, [v1=2, v2=4, v3=8, v4=16, v5=32, v6=64]
+  [.70,.30,0,0,0,0],      // Lv1  E[v] 2.60
+  [.56,.36,.08,0,0,0],    // Lv2  3.20
+  [.42,.42,.16,0,0,0],    // Lv3  3.80
+  [.30,.44,.22,.04,0,0],  // Lv4  4.76
+  [.20,.42,.29,.09,0,0],  // Lv5  5.84
+  [.13,.36,.35,.16,0,0],  // Lv6  7.06
+  [.08,.28,.38,.23,.03,0],// Lv7  8.96
+  [.05,.20,.37,.31,.07,0],// Lv8  11.06
+  [.03,.13,.33,.38,.13,0],// Lv9  13.46
+  [.02,.08,.25,.40,.20,.05],// Lv10 18.36
+];
+/* ★ v2.1 — 종류 확장. 2값 고정은 "2만 9연속" 체감을 만든다(실플레이 확인).
+   하한형 골격(레벨업 = 하한 상승)은 유지하고 위로 2칸 더 열었다.
+   최빈값 비중을 90% → 45% 안팎으로 낮춘 게 핵심. 나머지는 bag이 처리한다. */
+/* ★ v2.3 — 10레벨 / 천장 1024(MAXV=10)까지 확장.
+   골격은 그대로다: 종류는 항상 4개, 레벨업 = 창(窓)이 위로 미끄러진다.
+   Lv1~3은 창이 고정이고 확률만 위로 쏠린다(같은 16을 더 자주 본다).
+   Lv4부터는 창 자체가 한 칸씩 올라간다 — 하한이 오르는 게 진짜 성장이다.
+   종류를 4개로 묶어두는 이유: Σp²(매칭 확률)가 레벨마다 흔들리면 δ가 같이 흔들려서
+   난이도가 레벨의 부수효과로 움직인다. 종류를 고정하면 레벨은 "값의 위치"만 바꾼다.
+   → 동형성이 성립해서 레벨 간 클리어율이 소수점까지 같아진다(실측 확인). */
+const DIST_B=[ null,
+  [.46,.30,.17,.07,0,0,0,0,0,0],      // Lv1   2~16    E[v]   4.6
+  [.36,.32,.23,.09,0,0,0,0,0,0],      // Lv2   2~16          5.3
+  [.27,.32,.28,.13,0,0,0,0,0,0],      // Lv3   2~16          6.1
+  [0,.44,.31,.19,.06,0,0,0,0,0],      // Lv4   4~32          9.2
+  [0,.33,.32,.25,.10,0,0,0,0,0],      // Lv5   4~32         11.1
+  [0,0,.42,.32,.19,.07,0,0,0,0],      // Lv6   8~64         19.0
+  [0,0,0,.40,.31,.21,.08,0,0,0],      // Lv7  16~128        40.0
+  [0,0,0,0,.38,.31,.22,.09,0,0],      // Lv8  32~256        83.2
+  [0,0,0,0,0,.36,.31,.23,.10,0],      // Lv9  64~512       172.8
+  [0,0,0,0,0,0,.34,.31,.24,.11],      // Lv10 128~1024     358.4
+];
+/* 하한형 확정 — 대조군 전환 UI는 제거했다. DIST_A 는 문서 대조용으로만 남긴다 */
+const DIST=()=>DIST_B;
+const MAXLV=()=>50;
+/* Lv11+ 는 DIST_B 패턴을 그대로 연장한다.
+   Lv7~10 을 보면 규칙이 하나다 — 창은 항상 4종, 레벨마다 한 칸씩 위로 미끄러지고
+   최빈값 비중만 아주 천천히 낮아진다. 상한을 10에 두면 사냥터 11 이상에서
+   목표값이 생성 창 위로 올라가 영구 잠금이 생긴다. */
+const DIST_CACHE={};
+function distOf(lv){
+  lv=Math.max(1, lv|0);
+  if(lv<=10) return DIST_B[lv];
+  if(DIST_CACHE[lv]) return DIST_CACHE[lv];
+  const t=lv-10;
+  const shape=[Math.max(0.26,0.34-0.015*t), 0.31,
+               Math.min(0.30,0.24+0.008*t), Math.min(0.20,0.11+0.007*t)];
+  const sum=shape.reduce((a,b)=>a+b,0);
+  const out=new Array(lv).fill(0);
+  shape.forEach((q,i)=>{ out[lv-4+i]=q/sum });
+  return DIST_CACHE[lv]=out;
+}
+/* ★ v2.3 강화 비용 — idx = 목표 레벨 (PET_COST[2] = Lv1→Lv2).
+   Lv10이 만렙이라 배열은 11칸에서 끝난다. 길게 두면 costOf(10)이 값을 반환해
+   "만렙인데 살 수 있는" 상태가 생긴다.
+   구 곡선(만렙 265G)은 완주 총수입 15,840G의 1.7%였다 — 펫이 사실상 공짜라
+   "색에 돈을 쓴다"는 축이 수치로 안 섰다. 창이 실제로 올라가는 Lv3→4 이후를
+   가파르게 세워서 1펫 만렙 2,100G · 4펫 8,400G(총수입의 53%)로 올린다. */
+const PET_COST=[0,0,30,50,80,120,180,260,360,460,560];   // 1펫 누적 2,100G · 4펫 8,400G
+const costOf=lv=>PET_COST[lv+1]??null;      // lv → lv+1 비용. null = 만렙
+
+/* ★ v2.3 — 세이브 키를 올린다. 스테이지 테이블·펫 레벨 상한·아이템 종류가 전부 바뀌어서
+   구버전 세이브를 그대로 물면 maxStage 10짜리 진행도가 새 테이블에 얹힌다.
+   (스테이지 10이 처음부터 열려 있던 원인) 밸런스를 갈아엎을 때는 키를 같이 올린다. */
+/*GUIDE_START*/
+/* ↓ inject_guide.mjs 가 guide_data.mjs 에서 구워 넣는다. 직접 고치지 말 것 */
+const GUIDE=[{"n":1,"tag":"플레이","title":"이게 무슨 게임?","cuts":[{"src":"","cap":"한 판 진행 중"}],"body":"<p class=\"lead\">세로줄을 골라 알을 떨어뜨리고, <b>같은 색·같은 숫자</b>가 붙으면 합쳐집니다. 그렇게 만든 숫자를 <b>주문</b>으로 내보내면 골드가 들어옵니다.</p> <div class=\"cal\">한 줄로: <b>익숙한 드롭 머지에 색과 주문을 얹은 게임</b></div> <div class=\"kv\"> <div><span>목표</span>이 판의 주문을 전부 채우면 클리어</div> <div><span>패배</span>보드 30칸이 다 차고 더 합칠 게 없을 때</div> <div><span>한 판</span>약 50드롭(S1) ~ 140드롭(S6) · 2~5분</div> </div>"},{"n":2,"tag":"플레이","title":"조작은 하나뿐 — 열을 고른다","cuts":[{"src":"","cap":"첫 진입"},{"src":"","cap":"펫이 콤보를 외친다"}],"body":"<p class=\"lead\">보드의 <b>아무 칸</b>이나 누르면 그 세로줄 맨 위에서 알이 떨어집니다. 같은 줄이면 어디를 눌러도 결과가 같습니다.</p> <div class=\"kv\"> <div><span>NEXT</span>다음에 떨어질 알 2개가 미리 보입니다</div> <div><span>펫</span>상단 화면에서 <b>펫이 반응하고 콤보를 외칩니다.</b> 잘 이어붙일수록 더 크게 — 귀여운 펫들과 같이 판을 굴리는 그림입니다</div> <div><span>발광</span>알이 떨어지고 합쳐질 때 <b>화면 가장자리가 그 색으로 짧게 빛납니다</b></div> </div>"},{"n":3,"tag":"플레이","title":"주문을 채운다","cuts":[{"src":"","cap":"제출 가능 상태"}],"body":"<p class=\"lead\">보드 위 카드가 <b class=\"ok\">초록으로 켜지면</b> 제출할 수 있습니다. 누르면 그 알이 보드에서 빠지고 골드가 들어옵니다.</p> <div class=\"kv\"> <div><span>레일</span><b>좌우로 밀 수 있습니다</b> (드래그·터치·휠). 제출 가능한 카드는 항상 맨 왼쪽으로 모입니다</div> <div><span>골드</span>인게임 숫자는 <b>이번 판에 번 돈</b>입니다</div> <div><span>펫 ✓</span>그 색 주문을 <b>다 낸 펫</b>에 초록 체크가 붙습니다. 남은 색으로 시선이 좁혀집니다</div> </div>"},{"n":4,"tag":"플레이","title":"색이 늘고, 펫을 키운다","cuts":[{"src":"","cap":"스테이지 선택"},{"src":"","cap":"펫 관리 · 강화"}],"body":"<p class=\"lead\">스테이지가 오르면 <b>색이 하나씩 늘어납니다</b> (S4 빨강 · S7 초록 · S9 노랑). 색 수가 이 게임 난이도의 주 레버입니다.</p> <div class=\"kv\"> <div><span>권장레벨</span>모자란 펫은 <b class=\"bad\">붉게</b> 표시됩니다. 충족한 펫은 인게임 아이콘에 <b class=\"ok\">✓</b></div> <div><span>펫 레벨</span>올리면 <b>나오는 숫자의 하한이 올라갑니다</b>. 최대 Lv10 · 1024까지</div> <div><span>골드</span><b>펫 성장에만</b> 씁니다. 로비 → 펫 관리에서 강화</div> </div>"},{"n":5,"tag":"플레이","title":"아이템은 칸이 아니라 머지를 산다","cuts":[{"src":"","cap":"구매 · 사용"},{"src":"","cap":"대상 고르는 중"}],"body":"<p class=\"lead\">아이템은 <b class=\"gem\">다이아</b>로 삽니다. 골드와 지갑이 분리돼 있어서 \"성장을 포기하고 이번 판을 산다\" 같은 선택이 생기지 않습니다.</p> <table> <tr><th>아이템</th><th>가격</th><th>하는 일</th></tr> <tr><td>알 제거</td><td class=\"gem\">💎2</td><td>고른 알 하나를 없앱니다. 이웃에 같은 색이 없는 <b>죽은 알</b>을 터는 용도</td></tr> <tr><td>자리 교체</td><td class=\"gem\">💎3</td><td>알 두 개의 자리를 맞바꿉니다. <b>한 칸 차이로 못 붙는</b> 상황을 풉니다</td></tr> <tr><td>무지개</td><td class=\"gem\">💎1</td><td>다음에 떨어질 알이 <b>어떤 색과도 합쳐집니다</b></td></tr> <tr><td>숫자 +1단계</td><td class=\"gem\">💎2</td><td>고른 알을 한 단계 <b>올립니다</b>. 옆 숫자와 맞으면 그 자리에서 연쇄</td></tr> <tr><td>숫자 −1단계</td><td class=\"gem\">💎2</td><td>고른 알을 한 단계 <b>내립니다</b>. 너무 커져서 갇힌 알을 다시 쓰게 만듭니다</td></tr> </table> <div class=\"warn\">이 게임에는 <b>현금 결제가 없습니다</b>. 다이아는 플레이로만 모으며, 모자랄 때 구매 버튼을 누르면 그대로 지급됩니다.</div>"},{"n":6,"tag":"플레이","title":"판이 끝나면","cuts":[{"src":"","cap":"클리어"},{"src":"","cap":"로비"}],"body":"<p class=\"lead\">클리어하면 다음 스테이지가 열립니다. <b>이전 스테이지를 깨야 다음이 열립니다.</b></p> <div class=\"kv\"> <div><span>지면</span>골드는 그대로 남습니다. 죽은 알만 걷어내는 <b>되살리기(💎3)</b>가 판당 한 번</div> <div><span>로비</span>칩으로 골드·다이아 보유량. 카드를 누르면 스테이지 선택</div> <div><span>이어하기</span>브라우저에 저장됩니다. 초기화는 <b>설정 → 처음부터</b></div> </div>"},{"n":7,"tag":"룰북","title":"판정 규칙","cuts":[],"body":"<div class=\"two\"> <table><tr><th colspan=\"2\">합치기</th></tr> <tr><td>조건</td><td><b>같은 색 + 같은 숫자</b>가 상하좌우로 인접</td></tr> <tr><td>결과</td><td>한 칸이 되고 숫자가 <b>2배</b>. 연쇄는 자동</td></tr> <tr><td>무지개</td><td>어떤 색과도 합쳐짐</td></tr> <tr><td>천장</td><td>1024 (v10)</td></tr> <tr><td>맨 윗칸</td><td>같은 숫자면 그 자리에서 한 단계 상승 (칸 순증 0)</td></tr></table> <table><tr><th colspan=\"2\">등장 규칙</th></tr> <tr><td>색</td><td>그 판 <b>목표에 있는 색</b>만. 그중 아직 안 끝난 색만</td></tr> <tr><td>웨이브</td><td>동시 등장 색은 <b>2개로 잠김</b>. 앞 목표 색부터 순서대로</td></tr> <tr><td>숫자 상한</td><td>그 판 최대 목표값 <b>한 단계 아래</b>까지.<br>목표값이 그대로 떨어지면 합칠 일이 없어 코어가 죽음</td></tr> <tr><td>추첨</td><td><b>12칸 가방</b> — 확률대로 채워 섞고 하나씩. 확률은 그대로, 연속만 사라짐</td></tr> <tr><td>난수</td><td>시드 고정. <b>같은 조작 = 같은 전개</b></td></tr></table> </div> <div class=\"two\"> <table><tr><th colspan=\"2\">승패</th></tr> <tr><td>클리어</td><td>그 판 주문을 전부 채움</td></tr> <tr><td>패배</td><td>다음 알을 놓을 곳이 없고 제출 가능 카드도 없음</td></tr> <tr><td>되살리기</td><td>💎3 · 판당 1회 · <b>죽은 알</b>(이웃에 같은 색 없음)만 제거<br>5드롭 안에 다시 막히면 환불</td></tr></table> <table><tr><th colspan=\"2\">주문 · 골드</th></tr> <tr><td>카드</td><td>1장 = 알 1개. 일부는 <b>둘 다 있어야</b> 제출되는 복합 카드</td></tr> <tr><td>골드</td><td><code>30G × 2^단계</code> · 복합은 ×1.5</td></tr> <tr><td>단계</td><td>목표값이 <b>그 스테이지 권장레벨 최대등장값</b> 위로 몇 칸</td></tr> <tr><td>용도</td><td>골드 = 펫 성장 / 다이아 = 아이템</td></tr></table> </div>"},{"n":8,"tag":"룰북","title":"수치표","cuts":[],"body":"<table class=\"wide\"><tr><th>Lv</th><th>2</th><th>4</th><th>8</th><th>16</th><th>32</th><th>64</th><th>128</th><th>256</th><th>512</th><th>1024</th><th>기대값</th></tr> <tr><td>1</td><td class=\"hi\">46</td><td class=\"hi\">30</td><td class=\"hi\">17</td><td class=\"hi\">7</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>4.6</td></tr> <tr><td>2</td><td class=\"hi\">36</td><td class=\"hi\">32</td><td class=\"hi\">23</td><td class=\"hi\">9</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>5.3</td></tr> <tr><td>3</td><td class=\"hi\">27</td><td class=\"hi\">32</td><td class=\"hi\">28</td><td class=\"hi\">13</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>6.1</td></tr> <tr><td>4</td><td>·</td><td class=\"hi\">44</td><td class=\"hi\">31</td><td class=\"hi\">19</td><td class=\"hi\">6</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>9.2</td></tr> <tr><td>5</td><td>·</td><td class=\"hi\">33</td><td class=\"hi\">32</td><td class=\"hi\">25</td><td class=\"hi\">10</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>11.1</td></tr> <tr><td>6</td><td>·</td><td>·</td><td class=\"hi\">42</td><td class=\"hi\">32</td><td class=\"hi\">19</td><td class=\"hi\">7</td><td>·</td><td>·</td><td>·</td><td>·</td><td>19.0</td></tr> <tr><td>7</td><td>·</td><td>·</td><td>·</td><td class=\"hi\">40</td><td class=\"hi\">31</td><td class=\"hi\">21</td><td class=\"hi\">8</td><td>·</td><td>·</td><td>·</td><td>40.0</td></tr> <tr><td>8</td><td>·</td><td>·</td><td>·</td><td>·</td><td class=\"hi\">38</td><td class=\"hi\">31</td><td class=\"hi\">22</td><td class=\"hi\">9</td><td>·</td><td>·</td><td>83.2</td></tr> <tr><td>9</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td class=\"hi\">36</td><td class=\"hi\">31</td><td class=\"hi\">23</td><td class=\"hi\">10</td><td>·</td><td>172.8</td></tr> <tr><td>10</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td>·</td><td class=\"hi\">34</td><td class=\"hi\">31</td><td class=\"hi\">24</td><td class=\"hi\">11</td><td>358.4</td></tr></table> <p class=\"cap\">펫 레벨별 알 등장 확률(%). <b>종류는 항상 4개</b>, 레벨업 = 창이 위로 미끄러진다.</p> <div class=\"two\"> <table><tr><th>강화</th><th>비용</th><th>최대 등장값</th></tr> <tr><td>Lv1→2</td><td>30G</td><td>16</td></tr> <tr><td>Lv2→3</td><td>50G</td><td>16</td></tr> <tr><td>Lv3→4</td><td>80G</td><td>16 → 32 ★</td></tr> <tr><td>Lv4→5</td><td>120G</td><td>32</td></tr> <tr><td>Lv5→6</td><td>180G</td><td>32 → 64 ★</td></tr> <tr><td>Lv6→7</td><td>260G</td><td>64 → 128 ★</td></tr> <tr><td>Lv7→8</td><td>360G</td><td>128 → 256 ★</td></tr> <tr><td>Lv8→9</td><td>460G</td><td>256 → 512 ★</td></tr> <tr><td>Lv9→10</td><td>560G</td><td>512 → 1024 ★</td></tr> <tr><td colspan=\"3\" class=\"ft\">1펫 만렙 2,100G · 4펫 8,400G</td></tr></table> <table><tr><th>아이템</th><th>가격</th><th>효과</th></tr> <tr><td>알 제거</td><td class=\"gem\">💎2</td><td>알 하나 제거</td></tr> <tr><td>자리 교체</td><td class=\"gem\">💎3</td><td>두 알 위치 교환</td></tr> <tr><td>무지개</td><td class=\"gem\">💎1</td><td>다음 알이 만능색</td></tr> <tr><td>숫자 +1단계</td><td class=\"gem\">💎2</td><td>고른 알을 한 단계 위로</td></tr> <tr><td>숫자 −1단계</td><td class=\"gem\">💎2</td><td>고른 알을 한 단계 아래로</td></tr> <tr><td colspan=\"3\" class=\"ft\">되살리기 💎3 · 판당 1회</td></tr></table> </div> <table class=\"wide\"><tr><th>St</th><th>주문</th><th>권장레벨</th><th>목표</th><th>판당 골드</th><th>실측 드롭</th></tr> <tr><td>1</td><td>1</td><td>파1</td><td>파128×1</td><td>240G</td><td>38</td></tr> <tr><td>2</td><td>4</td><td>파1</td><td>파128×1 파16×3</td><td>330G</td><td>34</td></tr> <tr><td>3</td><td>9</td><td>파2</td><td>파128×1 파32×1 파16×7</td><td>510G</td><td>63</td></tr> <tr><td>4</td><td>16</td><td>파3 빨1</td><td>파128×1 파32×3 파16×7 빨16×5</td><td>780G</td><td>82</td></tr> <tr><td>5</td><td>25</td><td>파4 빨2</td><td>파256×1 파64×3 파32×9 빨32×2 빨16×10</td><td>1,110G</td><td>125</td></tr> <tr><td>6</td><td>36</td><td>파5 빨4</td><td>파256×1 파64×4 파32×13 빨64×3 빨32×15</td><td>1,500G</td><td>160</td></tr> <tr><td>7</td><td>49</td><td>파6 빨5 초3</td><td>파512×1 파128×5 파64×11 빨64×4 빨32×12 초16×16</td><td>1,950G</td><td>233</td></tr> <tr><td>8</td><td>64</td><td>파6 빨6 초5</td><td>파512×1 파128×4 파64×17 빨128×4 빨64×17 초64×4 초32×17</td><td>2,490G</td><td>252</td></tr> <tr><td>9</td><td>81</td><td>파7 빨6 초6 노4</td><td>파1024×1 파256×6 파128×11 빨128×5 빨64×13 초128×5 초64×13 노32×27</td><td>3,120G</td><td>370</td></tr> <tr><td>10</td><td>100</td><td>파7 빨7 초6 노6</td><td>파1024×1 파256×5 파128×19 빨256×5 빨128×20 초128×5 초64×20 노128×5 노64×20</td><td>3,810G</td><td>424</td></tr> <tr><td colspan=\"4\" class=\"ft\">주문 개수 = 스테이지² · 상위 1개만 +3단계</td><td class=\"ft\">15,840G</td><td class=\"ft\">1,781</td></tr></table> <p class=\"cap\">실측 = 봇 1회, 권장 레벨 진입. 10/10 클리어 · 총 1,781드롭 ≈ 59분. 1~10은 확정 테이블, 11부터는 절차 생성으로 이어집니다.</p>"}];
+/*GUIDE_END*/
+
+/* ══ 임베드 모드 ══════════════════════════════════════════════════
+   스낵바(셸)가 iframe 으로 이 파일을 띄운다.
+     들어올 때  #embed=1&stage=17&pets=b:12,r:11,g:10,y:9&gem=8
+     나갈 때    postMessage {t:'clear'|'fail'|'quit', stage, gold, ships, gemUsed}
+   임베드에서는 로비·스테이지선택·자체 세이브를 전부 끈다 — 진실의 원천은 셸이다 */
+const EMBED = (()=>{
+  /* 단일 파일 빌드에서는 셸이 srcdoc 으로 띄우기 때문에 해시가 없다.
+     그때는 셸이 미리 심어 둔 window.__EMBED 를 쓴다 */
+  if(window.__EMBED) return window.__EMBED;
+  const h=location.hash.slice(1); if(!h || h.indexOf('embed')<0) return null;
+  const q={}; h.split('&').forEach(kv=>{ const i=kv.indexOf('=');
+    q[i<0?kv:kv.slice(0,i)] = i<0?'1':decodeURIComponent(kv.slice(i+1)) });
+  return q;
+})();
+let gemStart=0, LOOT_BASE=0, LOOT_TXT='', LOOT2=[];
+/* 인게임 룰 카드 — 셸에서 들어오면 로비도 가이드도 안 거치고 바로 판이라
+   "이게 무슨 게임인지"를 판 위에서 볼 방법이 하나는 있어야 한다 */
+function post(t, extra){
+  if(!EMBED) return;
+  try{ parent.postMessage(Object.assign({
+    src:'rogueMerge', t, stage:S.stage,
+    gold:S.roundGold||0, ships:(roundLog&&roundLog.ships)||0,
+    drops:(roundLog&&roundLog.drops.length)||0,
+    gemUsed: Math.max(0, gemStart-(S.gem||0)),
+    items: Object.assign({}, S.items)
+  }, extra||{}), '*') }catch(_){}
+}
+/* 규칙 3컷 — 텍스트 5줄보다 그림 3장이 빠르다.
+   숫자 칩은 전부 같은 색으로 둔다. 색이 다르면 "색도 규칙인가?"를 먼저 묻게 된다 */
+function helpSheet(auto){
+  const blk=(v,big)=>`<span class="hblk${big?' big':''}">${v}</span>`;
+  $('sheet').innerHTML=`
+    <p class="big" style="margin-bottom:2px">사냥터 규칙</p>
+    <p class="sub" style="margin-bottom:16px">알을 합쳐 주문을 채우면 재료를 가져간다</p>
+    <div class="h3">
+      <div class="hc"><div class="hn">1</div>
+        <div class="hz">${blk(8)}${blk(8)}</div>
+        <div class="hv">▼</div>
+        <div class="hz">${blk(16,1)}</div>
+        <div class="ht">같은 알을 붙이면<br><b>합쳐진다</b></div></div>
+      <div class="hc"><div class="hn">2</div>
+        <div class="hz">${blk(16)}<span class="ha">→</span>${blk(32)}</div>
+        <div class="hv">▼</div>
+        <div class="hz">${blk(128,1)}</div>
+        <div class="ht">합칠수록<br><b>더 커진다</b></div></div>
+      <div class="hc"><div class="hn">3</div>
+        <div class="hz">${blk(128)}</div>
+        <div class="hv">▼</div>
+        <div class="hz"><span class="hord"><span class="hoc">128</span><span class="hob">제출</span></span></div>
+        <div class="ht">주문 카드와 맞으면<br><b>눌러서 제출!</b></div></div>
+    </div>
+    <p class="hint" style="margin-top:14px">판이 가득 차면 실패 · <b style="color:#ff8fa0">하트 −1</b></p>
+    <button class="mbtn use" style="margin-top:10px" id="hOk">탭해서 계속하기</button>`;
+  ovOpen(true);
+  $('hOk').onclick=()=>{
+    if(auto){                       // 첫 진입 안내는 ? 버튼으로 빨려 들어간다 — 어디서 다시 보는지 알려주는 연출
+      const sh=$('sheet'), hb=$('helpTop');
+      if(sh&&hb){
+        const a=sh.getBoundingClientRect(), t=hb.getBoundingClientRect();
+        sh.style.transformOrigin='center';
+        sh.style.transition='transform .38s cubic-bezier(.5,0,.75,0),opacity .38s ease';
+        sh.style.transform=`translate(${t.left+t.width/2-(a.left+a.width/2)}px,${t.top+t.height/2-(a.top+a.height/2)}px) scale(.06)`;
+        sh.style.opacity='.2';
+        hb.classList.add('pulse');
+        setTimeout(()=>{ ovClose(); sh.style.cssText=''; setTimeout(()=>hb.classList.remove('pulse'),900) },380);
+        return;
+      }
+    }
+    ovClose();
+  };
+}
+const SAVE='rogueMerge_v24';   // v2.4 — 스테이지 표·아이템 가격·값 상한이 전부 바뀌었다
+let S, roundLog=null, busy=false, waitT0=0;
+
+/* ---------- 저장 ---------- */
+function save(){
+  if(EMBED) return;                  // 셸이 저장한다
+  try{ localStorage.setItem(SAVE, JSON.stringify({
+    stage:S.stage, coin:S.coin, gem:S.gem, lv:S.lv, best:S.best, items:S.items,
+    maxStage:Math.max(S.maxStage||1, S.stage) })) }catch(_){}
+}
+function load(){
+  try{
+    const r=localStorage.getItem(SAVE); if(!r) return null;
+    const sv=JSON.parse(r);
+    /* 세이브 호환 — 펫 레벨은 항상 DIST_B 범위(1~10)로 클램프한다.
+       범위를 벗어나면 distOf()가 undefined 를 뱉고 렌더가 통째로 죽는다. */
+    if(sv&&sv.lv) for(const k in sv.lv) sv.lv[k]=Math.min(Math.max(sv.lv[k]|0,0), MAXLV());
+    // (상한 50 — 사냥터 50 = 권장 Lv20 대라 여유를 둔다)
+    return sv;
+  }catch(_){ return null }
+}
+
+/* ---------- 초기화 ---------- */
+function newGame(from){
+  const sv = from || {stage:1, coin:0, gem:20, lv:{b:1,r:0,g:0,y:0}, best:0, maxStage:1, items:{}};
+  rng=mulberry32(SEED + sv.stage*7919);
+  S={ stage:sv.stage, coin:sv.coin, lv:{...sv.lv}, best:sv.best||0, lastCombo:0, lastColor:null, comboColor:null, firstTap:false, itemMode:null, swapFirst:null, rainbowNext:false, items:Object.assign({del:0,swp:0,up:0,dn:0,rbw:0}, sv.items||{}), maxStage:Math.max(sv.maxStage||1, sv.stage),
+      gem:sv.gem??20, revived:false, reviveDrop:null,
+      grid:Array.from({length:ROWS},()=>Array(COLS).fill(null)),
+      goals:[], orders:[], queue:[], warn:0, over:false, combo:0,
+      T:{session:Date.now(), stages:[], blurs:0, blurMs:0, lastBlur:0,
+         drops:0, cellsMerged:0, cellsDelivered:0, distMode:'B'} };
+  buildStage(); stageStart(); buildPetRow(); buildItems(); render();
+  $('boardHint').classList.remove('gone');
+}
+const unlocked=()=>PETS.filter(p=>S.lv[p.k]>0);
+
+/* ---------- 스테이지 ---------- */
+/* ★ v2.2 스테이지 목표 — 개수 = S² 규칙 (2026-08-04 확정)
+   ① 개수  n = S²          → 1·4·9·16·25·36·49·64·81·100
+   ② 값    그 색 권장레벨 펫이 뱉을 수 있는 최대 등장값 + 단계
+           (Lv1~3 최대 16 · Lv4~5 최대 32 · Lv6 최대 64)
+   ③ 단계 배분  상위 1개 +3단계 / floor(n/5)개 +1단계 / 나머지 +0단계
+   ④ 신규 색 합류 스테이지(S4 빨강 · S7 초록 · S9 노랑)
+           신규 색이 전체 개수의 1/3, 값은 +0단계로만 (합류 직후는 약하게)
+
+   근거 — 개당 기대 드롭은 "펫 최대값 위로 몇 단계인가"만으로 정해지고 레벨과 무관하다.
+   0단계 4.5 · 1단계 9 · 2단계 18 · 3단계 36 드롭.  판당 드롭 = Σ(개수 × 4.5 × 2^단계).
+   그래서 개수를 늘려도 곡선이 부드럽고(개수 레버), 값을 올리면 절벽이 된다(값 레버).
+   S²는 개수 레버만 쓰고 값 레버는 상위 1개에만 쓰는 배치다.
+
+   v는 지수 — v4=16 · v5=32 · v6=64 · v7=128 · v8=256 · v9=512
+   ※ 머지 값 상한은 없다(v2.4). 목표 최대는 1024지만 판 안에서 그 위도 자연 발생한다. */
+const STAGE_TABLE=[ null,
+  [{c:'b',v:7,need:1}],                                                                              // S1  n=1   파128×1
+  [{c:'b',v:7,need:1},{c:'b',v:4,need:3}],                                                           // S2  n=4
+  [{c:'b',v:7,need:1},{c:'b',v:5,need:1},{c:'b',v:4,need:7}],                                        // S3  n=9
+  [{c:'b',v:7,need:1},{c:'b',v:5,need:3},{c:'b',v:4,need:7},{c:'r',v:4,need:5}],                     // S4  n=16  빨강 합류
+  [{c:'b',v:8,need:1},{c:'b',v:6,need:3},{c:'b',v:5,need:9},{c:'r',v:5,need:2},{c:'r',v:4,need:10}], // S5  n=25
+  [{c:'b',v:8,need:1},{c:'b',v:6,need:4},{c:'b',v:5,need:13},{c:'r',v:6,need:3},{c:'r',v:5,need:15}],// S6  n=36
+  [{c:'b',v:9,need:1},{c:'b',v:7,need:5},{c:'b',v:6,need:11},{c:'r',v:6,need:4},{c:'r',v:5,need:12},{c:'g',v:4,need:16}],                                     // S7  n=49  초록 합류
+  [{c:'b',v:9,need:1},{c:'b',v:7,need:4},{c:'b',v:6,need:17},{c:'r',v:7,need:4},{c:'r',v:6,need:17},{c:'g',v:6,need:4},{c:'g',v:5,need:17}],                  // S8  n=64
+  [{c:'b',v:10,need:1},{c:'b',v:8,need:6},{c:'b',v:7,need:11},{c:'r',v:7,need:5},{c:'r',v:6,need:13},{c:'g',v:7,need:5},{c:'g',v:6,need:13},{c:'y',v:5,need:27}],            // S9  n=81  노랑 합류 · 1024 첫 등장
+  [{c:'b',v:10,need:1},{c:'b',v:8,need:5},{c:'b',v:7,need:19},{c:'r',v:8,need:5},{c:'r',v:7,need:20},{c:'g',v:7,need:5},{c:'g',v:6,need:20},{c:'y',v:7,need:5},{c:'y',v:6,need:20}], // S10 n=100
+];
+/* 권장 레벨 — 스테이지 진입 시 각 색이 이 레벨 이상이면 위 우측 수치가 나온다 */
+const REC_LV=[ null,
+  {b:1}, {b:1}, {b:2},
+  {b:3,r:1}, {b:4,r:2}, {b:5,r:4},
+  {b:6,r:5,g:3}, {b:6,r:6,g:5},
+  {b:7,r:6,g:6,y:4}, {b:7,r:7,g:6,y:6},
+];
+/* ═══ 스테이지 생성 모델 v1 (S11+) ══════════════════════════════════
+   설계 원칙 = 스케일 불변. 판 길이(드롭 예산)에 상한을 두고 진동만 시키고,
+   난이도는 "더 길게"가 아니라 예산을 어떻게 쓰느냐(단계 분포)로 올린다.
+   구 절차생성은 목표 개수 1~2장짜리 기형 판을 뱉었다(S11 실측 4~8주문 · v8 상한). */
+const GM = (()=>{
+  /* F_CAP 572 = S10 동급(424드롭 ≈ 14분). 방치형 셸의 한 사이클은 3분이라
+     130(≈95드롭 ≈ 3분)으로 낮춘다 — 스케일 불변 구조는 그대로다 */
+  /* 깊이가 늘면 같은 예산에서 개수가 깎인다. 개수도 난이도 레버라 예산을 조금 키워 보전한다 */
+  const F_CAP=155, DROP0=4.5, GB=30, CO=['b','r','g','y'];
+  const REC10={b:7,r:7,g:6,y:6}, OFF={b:0,r:1,g:2,y:3};
+  const RHY=[1.00,0.84,1.06,0.78,1.12,0.88,1.18];
+  const stepDrop=k=>DROP0*Math.pow(2,k);
+  const lvEvery=S=>Math.min(8, 3+Math.floor((S-10)/100));
+  const SEG=(()=>{const a=[];for(let k=0;k<=5;k++)a.push([110+k*100-1,3+k]);return a})();
+  function lvAccum(S){ if(S<11) return 0; let acc=0, from=11;
+    for(const [end,every] of SEG){ if(S<=end){ acc+=(S-from+1)/every; return acc }
+      acc+=(end-from+1)/every; from=end+1 } return acc+(S-from+1)/8 }
+  function recLv(S,c){
+    if(S<=10) return (REC_LV[S]||{})[c] || 1;
+    const e=lvEvery(S);
+    return REC10[c] + Math.floor(lvAccum(S))
+         + (Math.floor((S-10+OFF[c])/e) - Math.floor((S-10)/e));
+  }
+  function rhythm(S){ let r=RHY[(S-11)%RHY.length];
+    if(S%13===0) r*=1.16; if(S%13===1) r*=0.80; return r }
+  /* 목표 사다리의 '폭'. 이 값이 그 판의 난이도 축이다 —
+     스테이지가 권장 레벨을 정하고, 그 위로 몇 단 더 쌓느냐가 여기서 결정된다.
+     ⚠ 나눗셈이 60이던 시절엔 S≤69 가 전부 3이라, 사냥터 50개 안에서 한 번도 안 자랐다.
+        절대값(1024→200만)만 커지고 "몇 번 합치나"는 S11~S45 가 똑같았다(실측).
+     17 = 50판을 3→5 세 구간으로. S11→3 · S28→4 · S45→5.
+     6단까지 올렸더니 최상위 카드 하나가 예산의 절반(2^6=64드롭)을 먹어
+     주문이 21장 → 9장으로 깎였다. 판이 짧아진 게 아니라 '심심해'졌다 */
+  const maxStep=S=>Math.min(5, 3+Math.floor((S-10)/17));
+  const peak=S=>(S%13===0 && rhythm(S)>=1.0)?2:1;
+  /* ★ 단계 분포 — 예산을 '어느 단계에 쓰느냐'. 이게 진짜 난이도 축이다.
+     w1·w2 = 중간 단계(+1·+2)에 배정할 예산 비율. 나머지는 전부 최하위(+0)로 간다.
+     ⚠ 예전엔 (S-11)%9 라 스테이지가 올라도 제자리를 맴돌았다. 그 결과
+        어느 판이든 '최하위 25장 + 중간 3장' 모양이라 복합 카드 짝도 3쌍이 한계였고,
+        pDbl 을 아무리 올려도 복합이 1장을 못 넘겼다(실측).
+     이제 S11→S50 으로 단조 증가시킨다. 뒤로 갈수록 중간 단계가 두꺼워져
+     "얕고 많은 판"에서 "깊고 촘촘한 판"으로 바뀐다 */
+  function midMix(S){
+    const t=Math.max(0, Math.min(1, (S-11)/39));      // S11 → 0 · S50 → 1
+    return { w1: 0.18 + 0.30*t, w2: S>=16 ? 0.04 + 0.24*t : 0 };
+  }
+  function goals(S, cols){
+    const CO = (cols && cols.length) ? cols : ['b','r','g','y'];
+    const F=F_CAP*rhythm(S), ms=maxStep(S), pk=peak(S);
+    let eRest=Math.max(0, F - pk*stepDrop(ms));
+    const {w1,w2}=midMix(S);
+    const d2=Math.floor(eRest*w2/stepDrop(2)), d1=Math.floor(eRest*w1/stepDrop(1));
+    eRest-=d2*stepDrop(2)+d1*stepDrop(1);
+    const d0=Math.max(8, Math.round(eRest/stepDrop(0)));
+    const N=CO.length;
+    const spread=t=>{const b=Math.floor(t/N), r=t%N; return CO.map((c,i)=>b+(i<r?1:0))};
+    const a2=spread(d2), a1=spread(d1), a0=spread(d0), out=[];
+    const push=(c,step,need)=>{ if(need<=0) return;
+      out.push({ c, v: recLv(S,c)+step, need, step }) };
+    push(CO[0], ms, pk);                    // 목적지 = 가장 오래된 색
+    CO.forEach((c,i)=>push(c,2,a2[i]));
+    CO.forEach((c,i)=>push(c,1,a1[i]));
+    CO.forEach((c,i)=>push(c,0,a0[i]));
+    const m=[];
+    for(const g of out){ const f=m.find(x=>x.c===g.c&&x.v===g.v);
+      if(f) f.need+=g.need; else m.push({...g}) }
+    return m;
+  }
+  return { goals, recLv, maxStep };
+})();
+function buildStage(){
+  const u=unlocked();
+  let goals;
+  if(STAGE_TABLE[S.stage]){
+    /* 목표에 있는 색은 무조건 보유 상태로 맞춘다.
+       예전엔 미보유 색 목표를 잘라냈는데, 그러면 스테이지가 조용히 쉬워진다(=밸런스 표 무효).
+       테이블이 정본이고 보유 여부가 따라와야 한다. */
+    /* 정본 테이블은 S10 = 100주문(≈14분) 스케일이다. 셸의 한 사이클이 3분이라
+       개수만 비례 축소한다 — 값·색·구조는 그대로 두고 길이만 줄인다 */
+    const sc = Math.min(1, 2.2/S.stage);
+    for(const g of STAGE_TABLE[S.stage]) if(!S.lv[g.c]) S.lv[g.c]=1;
+    goals=STAGE_TABLE[S.stage].map(g=>({...g, need:Math.max(1,Math.round(g.need*sc)), done:0}));
+  }else{                                   // 11+ = 스테이지 생성 모델 v1
+    /* 색은 셸이 넘겨준 알바몬만 쓴다 — 퍼즐이 임의로 색을 열면 재료 계열과 어긋난다 */
+    const cols = ['b','r','g','y'].filter(c=>(S.lv[c]||0)>0);
+    goals = GM.goals(S.stage, cols).map(g=>({c:g.c, v:g.v, need:g.need, done:0}));
+  }
+  S.goals=goals;
+  // 카드 1장 = 알 1개. 목표가 2종 이상이면 일부를 "둘 다 있어야 제출" 복합 카드로 묶는다.
+  const single=[];
+  for(const g of goals) for(let i=0;i<g.need;i++) single.push({c:g.c,v:g.v});
+  /* ★ v2.2 — 복합 카드 비율을 개수에 반비례시킨다.
+     복합 카드는 두 알을 동시에 들고 있으라는 요구라서 보드 점유(δ)를 직접 올린다.
+     후반 스테이지는 개수 자체로 이미 길다. 거기에 동시 보유까지 겹치면 개수 레버가
+     값 레버처럼 절벽이 된다 — 개수 레버를 부드럽게 유지하려고 확률을 깎는다.
+     또 최상위 1개(+3단계) 카드는 항상 단독으로 둔다. 그 판의 목적지라서 다른 조건에
+     묶이면 "언제 낼 수 있는지"가 흐려진다. */
+  const cards=[];
+  /* 복합 카드 = 두 알을 동시에 들고 있으라는 요구 → 보드 점유(δ)를 직접 올린다.
+     개수 반비례만 걸어 두니 후반으로 갈수록 오히려 낮아져서 난이도 레버가 거꾸로 돌았다.
+     스테이지에 비례시키고, 개수 항은 폭주 방지용으로만 남긴다 */
+  const pDbl = (window.__pDbl!=null) ? window.__pDbl
+              : (S.stage>=3 ? Math.min(0.60, Math.max(0.20,
+                   0.30 + S.stage*0.006 - single.length*0.002)) : 0);   // __pDbl = SIM A/B용 오버라이드
+  let first=true;
+  while(single.length){
+    const a=single.shift();
+    const j=single.findIndex(o=>o.c===a.c && o.v!==a.v);   // 웨이브 밖 색과 묶이면 영영 안 켜진다
+    if(j>=0 && !first && rng()<pDbl){
+      const b2=single.splice(j,1)[0];
+      cards.push({reqs:[a,b2]});
+    } else cards.push({reqs:[a]});
+    first=false;
+  }
+  S.orders=cards.map((c,i)=>({id:i, reqs:c.reqs}));
+  S._osig=null;                       // 레일 강제 재생성 (같은 시드로 재시작하면 시그니처가 겹친다)
+  S.grid=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  resetBag();
+  S.queue=[]; fillQueue();
+}
+function fillQueue(){ while(S.queue.length<2) S.queue.push(rollEgg()) }
+/* ★ 등장 색 규칙 — 두 겹의 필터. 밸런스 시뮬(N=24)이 이 조건으로 측정됐다.
+   ① 스테이지 필터 : 이 판의 "목표에 있는 색"만 등장한다.
+      해금(=합류)은 소유일 뿐 등장이 아니다. 빨강이 S3에 합류해도 S3 목표가 파랑뿐이면 S3엔 안 나온다.
+   ② 잔여 목표 필터 : 그중에서도 아직 안 끝난 목표의 색만 나온다.
+      "빨강 32만 남았는데 파랑·초록이 계속 뜨는" 구간을 구조로 차단.
+   ⚠ 부작용: 후반으로 갈수록 유효 색 수가 줄어 난이도 축(색=폭)이 자동 완화된다. 밸런스 전제다.
+   ⚠ 구 FOCUS 가중치(소프트 포커싱)는 폐기 — 시뮬이 하드 필터로 측정됐고, 둘을 겹치면 δ가 달라진다. */
+function stageColors(){ const t=new Set(); for(const g of S.goals) t.add(g.c); return [...t] }
+/* ★ v2.2 — 웨이브. 동시에 등장하는 색을 WAVE개로 잠근다.
+   δ(드롭당 순증 칸)는 보드 위 "색 × 값" 종류 수에 정비례한다. 4색이 동시에 뜨면
+   30칸에 16종류가 흩어져서 머지가 거의 안 붙고 δ가 0.5~0.7까지 올라간다.
+   → 한 판의 물리적 길이가 30/0.6 ≈ 50드롭으로 잘린다. 개수 레버를 쓸 수가 없다.
+   목표 순서대로 앞 WAVE개 색만 등장시키면, 색 축(폭)은 그대로 두고 길이만 열린다.
+   색 수와 개수는 곱하는 게 아니라 맞바꾸는 관계다. */
+let WAVE=2;                 // SIM 실험용으로 let. 정본값은 아래 결정 주석 참조
+function needColors(){
+  const t=[];
+  for(const g of S.goals) if(g.done<g.need && !t.includes(g.c)) t.push(g.c);
+  return new Set(t.slice(0,WAVE));
+}
+function genPool(){
+  const sc=stageColors();
+  const live=[...needColors()].filter(c=>sc.includes(c));
+  return live.length?live:sc;            // 잔여 0 = 클리어 직전 → 스테이지 색 전체로 폴백
+}
+/* ★ v2.1 — 목표 초과값 차단 + 가방(bag) 추첨
+   ① 클램프: 이 판 최대 목표값을 넘는 알은 아예 안 나온다.
+      초과 알은 어떤 주문에도 못 쓰이고 칸만 먹는 죽은 블록이 된다.
+      (펫 Lv6으로 낮은 스테이지에 갔을 때 특히)
+   ② bag: 독립 추첨이면 같은 값이 길게 이어진다(0.9^9 ≈ 39%).
+      12칸 가방을 분포대로 채워 섞고 하나씩 꺼낸다. 확률은 같고 뭉침만 사라진다.
+      결정론 유지 — rng 한 스트림만 쓴다. */
+let BAG={}, lastV={};
+function resetBag(){ BAG={}; lastV={} }
+function stageVMax(){
+  let m=0; for(const g of (S.goals||[])) if(g.v>m) m=g.v;
+  const cap=genVmax();
+  return Math.min(m||cap, cap);            // 생성 상한 = 최고 펫 레벨. 머지 결과만 무한
+}
+function clampDist(d,vmax){
+  /* 상한 = 목표값 한 단계 아래. 목표값이 그대로 떨어지면 "줍기만 하는 판"이 되고
+     머지가 0회로 끝난다 — 코어가 죽는다. 최소 한 번은 합치게 만든다.
+     단 그렇게 잘라서 종류가 1개밖에 안 남으면(낮은 스테이지 재방문 등) 목표값까지 연다. */
+  const cut=(lim)=>{
+    const out=d.slice(); let over=0;
+    for(let i=lim;i<out.length;i++){ over+=out[i]; out[i]=0 }
+    if(over>0) for(let i=lim-1;i>=0;i--) if(out[i]>0){ out[i]+=over; break }
+    return out;
+  };
+  let out=cut(Math.max(1,vmax-1));
+  if(out.filter(x=>x>0).length<2) out=cut(vmax);   // 종류 1개면 한 칸 더 연다
+  return out;
+}
+function bagPick(c,lv,vmax){
+  const key=c+'|'+lv+'|'+vmax;
+  let b=BAG[key];
+  if(!b||!b.length){
+    const d=clampDist(distOf(lv),vmax), N=12;
+    const cnt=d.map(x=>Math.round(x*N));
+    let sum=cnt.reduce((a,x)=>a+x,0);
+    let mi=0; for(let i=1;i<d.length;i++) if(d[i]>d[mi]) mi=i;
+    cnt[mi]+=N-sum;                              // 반올림 오차는 최빈값이 흡수
+    b=[]; cnt.forEach((n,i)=>{ for(let k=0;k<n;k++) if(n>0) b.push(i+1) });
+    for(let i=b.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [b[i],b[j]]=[b[j],b[i]] }
+    BAG[key]=b;
+  }
+  let v=b.pop();
+  // 가방 경계에서 생기는 연속만 한 번 교정
+  if(v===lastV[c] && b.length){
+    const alt=b.findIndex(x=>x!==v);
+    if(alt>=0){ const t=b[alt]; b[alt]=v; v=t }
+  }
+  lastV[c]=v;
+  return v;
+}
+function rollEgg(){
+  const pool=genPool();
+  const c=pool[Math.floor(rng()*pool.length)] || 'b';   // 색은 균등 추첨 (시뮬과 동일)
+  return {c, v: bagPick(c, S.lv[c]||1, stageVMax())};
+}
+function findEgg(c,v,skip){
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+    const e=S.grid[y][x];
+    if(e&&e.c===c&&e.v===v&&!(skip&&skip.has(y+'_'+x))) return [y,x];
+  }
+  return null;
+}
+// 복합 카드는 요구가 전부(서로 다른 칸에) 있어야 제출 가능
+function orderReady(o){
+  const used=new Set();
+  for(const r of o.reqs){
+    const p=findEgg(r.c,r.v,used);
+    if(!p) return false;
+    used.add(p.join('_'));
+  }
+  return true;
+}
+const anyReady=()=>S.orders.some(orderReady);
+
+/* ---------- 그리기 ---------- */
+const $=id=>document.getElementById(id);
+const boardEl=$('board');
+const hexOf=k=>(PETS.find(p=>p.k===k)||{hex:'#8b90a3'}).hex;
+/* ── 알 색 체계 ───────────────────────────────────────────────
+   색상(hue)은 펫 = 정보축 1. 단계(v)는 명도·채도·계열내 색상드리프트·재질 = 정보축 2.
+   글자색은 배경 명도에서 자동 반전 → 대비 4.5:1 유지.
+   HUE: [저단계, 고단계]. 계열을 벗어나지 않는 폭(±10°)만 돈다.  */
+const HUE={ b:[224,201], r:[  6, 24], g:[148,124], y:[ 36, 52] };
+const SATV={ b:[58,100], r:[62,100], g:[52, 82], y:[72,100] };
+function tone(k,v){
+  if(k==='*') return 'background:linear-gradient(135deg,#ff7a59,#ffd166,#6ee08a,#5aa9ff);'
+    +'color:#0d0f16;text-shadow:0 1px 0 rgba(255,255,255,.5)';
+  /* 상한이 없어졌으므로 램프를 14티어(16384)까지 늘리고 그 위는 포화시킨다.
+     포화 구간은 색으로 구분이 안 되니 render 에서 링(.vhi)을 덧붙여 구분한다 */
+  const t=Math.min(Math.max(v,1),14), p=(t-1)/13;
+  const H=HUE[k]||[212,212], S=SATV[k]||[60,100];
+  const hu = H[0]+(H[1]-H[0])*p;
+  const sa = S[0]+(S[1]-S[0])*p;
+  const li = 30 + 41*p;                                    // 30% → 71%. 기존 대비 3배 폭
+  const C=(l,s)=>`hsl(${hu} ${Math.min(s,100)}% ${Math.max(4,Math.min(96,l))}%)`;
+  // 위 밝고 아래 어두운 구체
+  let css=`background:linear-gradient(180deg,${C(li+13,sa)} 0%,${C(li,sa)} 54%,${C(li-11,sa*.92)} 100%);`;
+  // 글자 — 배경이 어두우면 흰색, 밝아지면 같은 계열의 아주 진한 색
+  css += li<55
+    ? `color:${C(95,Math.min(sa,34))};text-shadow:0 1px 2px rgba(0,0,0,.55);`
+    : `color:${C(12,Math.min(sa,88))};text-shadow:0 1px 0 rgba(255,255,255,.45);`;
+  // 재질 4티어 — 색을 더 안 쓰고 "격"을 표현하는 축
+  const lipT='inset 0 2px 0 rgba(255,255,255,.34)', lipB='inset 0 -3px 0 rgba(0,0,0,.30)',
+        drop='0 2px 4px rgba(0,0,0,.42)';
+  if(t<=3)      css+=`box-shadow:${lipT},${lipB},${drop};`;
+  else if(t<=6) css+=`box-shadow:inset 0 2px 0 rgba(255,255,255,.50),${lipB},${drop};`;
+  else if(t<=9) css+=`box-shadow:inset 0 0 0 2px ${C(88,sa)},${lipT},${lipB},${drop},0 0 10px ${C(li,sa)}66;`;
+  else          css+=`box-shadow:inset 0 0 0 2px ${C(94,sa)},${lipT},${lipB},0 0 18px ${C(li+8,sa)}aa;`;
+  return css;
+}
+
+/* 펫 그림 (SVG) */
+function petSVG(k,size){
+  const h=hexOf(k), d=k;
+  const top =
+    d==='b' ? `<path d="M32 6c4 6 7 9 7 13a7 7 0 0 1-14 0c0-4 3-7 7-13z" fill="${h}" opacity=".9"/>`
+  : d==='r' ? `<path d="M32 5c5 7 9 9 9 14a9 9 0 0 1-18 0c0-3 2-5 4-8 1 3 3 4 3 4-1-4 1-7 2-10z" fill="${h}" opacity=".9"/>`
+  : d==='g' ? `<path d="M32 20c-2-8 3-14 10-15 1 8-3 14-10 15z" fill="${h}" opacity=".9"/>`
+  :           `<path d="M32 5l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z" fill="${h}" opacity=".95"/>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64">
+    <ellipse cx="32" cy="60" rx="16" ry="3" fill="#000" opacity=".28"/>
+    ${top}
+    <ellipse cx="32" cy="40" rx="19" ry="17" fill="${h}"/>
+    <ellipse cx="32" cy="45" rx="13" ry="10" fill="#fff" opacity=".22"/>
+    <circle cx="25" cy="37" r="3.4" fill="#12131a"/>
+    <circle cx="39" cy="37" r="3.4" fill="#12131a"/>
+    <circle cx="26.2" cy="35.8" r="1.2" fill="#fff"/>
+    <circle cx="40.2" cy="35.8" r="1.2" fill="#fff"/>
+    <ellipse cx="19" cy="43" rx="3.4" ry="2.2" fill="#fff" opacity=".34"/>
+    <ellipse cx="45" cy="43" rx="3.4" ry="2.2" fill="#fff" opacity=".34"/>
+    <path d="M29 45q3 2.6 6 0" stroke="#12131a" stroke-width="1.9" fill="none" stroke-linecap="round"/>
+  </svg>`;
+}
+function buildPetRow(){ syncPetRow() }
+function syncPetRow(){
+  const sc=(S.goals&&S.goals.length)?stageColors():unlocked().map(p=>p.k);
+  const inStage=PETS.filter(p=>sc.includes(p.k));
+  /* ★ v2.3 — 체크는 "권장레벨 충족"이 아니라 "이 판에서 그 색 주문을 다 냈다"는 뜻이다.
+     권장레벨은 판에 들어오기 전 판단이라 로비에서 이미 끝난 정보고,
+     판 안에서 필요한 건 "빨강은 끝났으니 이제 파랑만 보면 된다"는 진행 상태다.
+     색이 여러 개인 스테이지에서 남은 색으로 시선을 좁혀주는 게 목적. */
+  const ok=p=>{ const gs=(S.goals||[]).filter(g=>g.c===p.k);
+    return gs.length>0 && gs.every(g=>g.done>=g.need) };
+  const cur=inStage.map(p=>p.k+(ok(p)?'✓':'')).join(',');
+  if($('petRow').dataset.cur===cur) return;
+  $('petRow').dataset.cur=cur;
+  $('petRow').innerHTML=inStage.map(p=>
+    `<div class="pslot" data-k="${p.k}">${petSVG(p.k,46)}${ok(p)?'<span class="pchk">✓</span>':''}</div>`).join('');
+  setTimeout(()=>restBubble(),0);
+}
+/* ★ v2.4 (I-1) — 연출은 "지금 DOM을 만진다"가 아니라 "상태에 적어두고 render 말미에 적용한다".
+   R1이 잡은 petBounce 0회 / glowMerge 미도달의 공통 근본원인이 이 순서였다:
+   로직이 DOM에 클래스를 붙인 직후 render()가 innerHTML을 다시 그리면서 그 노드를 통째로 날린다.
+   큐에 적어두면 render가 노드를 다 만든 뒤 마지막에 붙이므로 유실이 구조적으로 불가능하다.
+   SYNC(SIM) 중에는 큐만 쌓이고 flush가 안 돌아 DOM 비용이 0이다. */
+const FX={pet:[], cell:[], edge:null};
+function reactPet(k){ if(k!=='*'&&k) FX.pet.push(k) }
+/* 알을 놓을 때마다 중앙 펫이 한 마디 — 콤보와 같은 말풍선을 쓴다 */
+const SAY = {
+  b:['시원하다!','바다 냄새~','파도 간다','철썩!'],
+  r:['뜨겁다!','불 붙는다','지글지글','바싹!'],
+  g:['싱싱해!','아삭아삭','새싹 뿅','풀 내음~'],
+  y:['반짝!','달콤해','고소하다','톡톡!'],
+};
+function petSay(k){
+  if(!k || k==='*' || S.combo>0) return;
+  const p=SAY[k]; if(!p) return;
+  const b=$('bubble'); b.style.display='flex';
+  $('bbox').textContent = p[Math.floor(rng()*p.length)];
+  b.className='bubble say hot';
+  const h=hexOf(k);
+  b.style.setProperty('--bc', mixHex(h,.16));
+  b.style.setProperty('--bl', mixHex(h,.52));
+  b.style.setProperty('--bt', h);
+  tailTo(k);
+  clearTimeout(bubbleTimer);
+  bubbleTimer=setTimeout(restBubble, 900);
+}
+function fxCell(y,x,cls){ FX.cell.push([y,x,cls]) }
+function flushFX(){
+  if(SYNC){ FX.pet.length=0; FX.cell.length=0; FX.edge=null; return }
+  for(const k of FX.pet){
+    const el=$('petRow').querySelector(`[data-k="${k}"]`);
+    if(el){ el.classList.remove('bounce'); void el.offsetWidth; el.classList.add('bounce') }
+  }
+  for(const [y,x,cls] of FX.cell){
+    const el=boardEl.querySelector(`[data-k="${y}_${x}"]`);
+    if(el) el.classList.add(cls);
+  }
+  FX.pet.length=0; FX.cell.length=0;
+}
+let bubbleTimer=null;
+function tailTo(k){
+  const slot = k && $('petRow').querySelector(`[data-k="${k}"]`);
+  const pr=$('pip').getBoundingClientRect();
+  const t=$('tail');
+  if(slot){ const sr=slot.getBoundingClientRect();
+    t.style.left=(sr.left-pr.left+sr.width/2)+'px' }
+  else t.style.left='50%';
+}
+function mixHex(h,a){ const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),
+  b=parseInt(h.slice(5,7),16); return `rgba(${r},${g},${b},${a})` }
+function showCombo(n,k){
+  const b=$('bubble'); b.style.display='flex';
+  $('bbox').textContent=n+' COMBO';
+  b.className='bubble '+(n>=5?'gold':'hot');
+  const h=k?hexOf(k):'#8b90a3';
+  b.style.setProperty('--bc', mixHex(h, n>=5?.30:.20));
+  b.style.setProperty('--bl', mixHex(h, .70));
+  b.style.setProperty('--bt', h);
+  tailTo(k); reactPet(k);
+  clearTimeout(bubbleTimer);
+  bubbleTimer=setTimeout(restBubble,1100);
+}
+function restBubble(){
+  const b=$('bubble');
+  if(!S.lastCombo){ b.style.display='none'; return }
+  b.style.display='flex'; b.className='bubble';
+  const h=S.lastColor?hexOf(S.lastColor):'#8b90a3';
+  b.style.setProperty('--bc', mixHex(h,.13));
+  b.style.setProperty('--bl', mixHex(h,.45));
+  b.style.setProperty('--bt', h);
+  $('bbox').textContent=S.lastCombo+' COMBO';
+  tailTo(S.lastColor);
+}
+
+/* 레일 스와이프 — 포인터 드래그 + 휠 가로 변환.
+   모바일은 네이티브 터치 스크롤이 먹지만 PC(그리고 개발자도구 반응형)에선 안 먹는다.
+   같은 제스처를 둘 다에서 쓰게 pointer 이벤트 하나로 처리한다.
+   드래그로 6px 넘게 움직였으면 그 다음 click은 삼킨다 — 안 그러면 스와이프 끝에서
+   손을 뗀 카드가 그대로 제출된다. */
+function initRail(el){
+  if(el._rail) return; el._rail=true;
+  let down=false, sx=0, sl=0, moved=0, pid=null;
+  el.addEventListener('pointerdown', e=>{
+    if(e.button!==undefined && e.button!==0) return;
+    down=true; pid=e.pointerId; sx=e.clientX; sl=el.scrollLeft; moved=0;
+  });
+  el.addEventListener('pointermove', e=>{
+    if(!down || e.pointerId!==pid) return;
+    const dx=e.clientX-sx;
+    if(!moved && Math.abs(dx)>4){                 // 임계 넘은 뒤에야 캡처 — 탭은 그대로 살린다
+      el.classList.add('drag');
+      try{ el.setPointerCapture(pid) }catch(_){}
+    }
+    if(Math.abs(dx)>4){ moved=Math.max(moved,Math.abs(dx)); el.scrollLeft=sl-dx; }
+  });
+  const end=e=>{
+    if(!down) return; down=false;
+    el.classList.remove('drag');
+    try{ el.releasePointerCapture(pid) }catch(_){}
+    if(moved>6){ el._eat=true; setTimeout(()=>el._eat=false,0) }
+  };
+  el.addEventListener('pointerup',end);
+  el.addEventListener('pointercancel',end);
+  el.addEventListener('pointerleave',end);
+  el.addEventListener('click', e=>{ if(el._eat){ e.stopPropagation(); e.preventDefault() } }, true);
+  el.addEventListener('wheel', e=>{                // PC 휠 = 가로 스크롤
+    if(Math.abs(e.deltaY)<=Math.abs(e.deltaX)) return;
+    el.scrollLeft+=e.deltaY; e.preventDefault();
+  }, {passive:false});
+}
+
+function render(){
+  if(SYNC) return;                 // SIM 실행 중엔 DOM을 안 건드린다(로직 동일, 속도 100배)
+  $('stgN').textContent=S.stage;
+  /* 목표 종류가 최대 9줄이라 완료분은 접고 남은 것만 위에서부터 세운다.
+     총 남은 개수는 태그에 붙여서 한 눈에 보이게. */
+  const remain=S.goals.reduce((a,g)=>a+Math.max(0,g.need-g.done),0);
+  $('goalTag').innerHTML = remain ? `목표 <b>${remain}</b>` : '목표 <b>완료</b>';
+  const live=S.goals.filter(g=>g.done<g.need);
+  const show=(live.length?live:S.goals).slice(0,9);
+  $('goalGrid').innerHTML=show.map(g=>{
+    const left=g.need-g.done, ck=left<=0;
+    return `<div class="g ${ck?'done':''}">
+      <div class="gchip" style="${tone(g.c,g.v)}">${VAL(g.v)}</div>
+      <span class="gnum ${ck?'ck':''}">${ck?'✓':'×'+left}</span></div>`;
+  }).join('');
+
+  /* ★ v2.2 — S10은 카드가 100장이다. 전량 렌더는 드롭마다 100개 DOM을 다시 만든다.
+     제출 가능 카드는 정렬로 항상 맨 앞에 오므로, 앞 RAIL장만 그려도 조작 결과는 동일하다.
+     나머지는 "+N" 하나로 접는다. */
+  /* ★ v2.2 — 좌우 스와이프 레일.
+     ① 정렬은 "제출 가능 먼저". 그래서 낼 수 있는 카드는 늘 왼쪽 끝에 모인다.
+     ② RAIL장까지만 DOM으로 만들고 나머지는 "+N". 100장을 드롭마다 다시 그리면 프레임이 죽는다.
+     ③ 시그니처(순서 + 켜짐 상태)가 그대로면 innerHTML 자체를 안 건드린다.
+        매 드롭 재생성하면 드래그 중에 DOM이 갈려서 스와이프가 툭툭 끊긴다.
+     ④ 재생성할 때도 스크롤 위치는 보존한다. 유저가 오른쪽을 보고 있는데 맨 앞으로
+        튕겨 보내면 "내가 뭘 보고 있었지"가 된다. */
+  const RAIL=40;
+  const sorted=[...S.orders].sort((a,b)=>(orderReady(b)?1:0)-(orderReady(a)?1:0));
+  const head=sorted.slice(0,RAIL), rest=sorted.length-head.length;
+  const el=$('orders');
+  const osig=head.map(o=>o.id+(orderReady(o)?'!':'')).join(',')+'|'+rest;
+  if(osig!==S._osig){
+    const keep=el.scrollLeft;
+    el.innerHTML=head.map(o=>{
+      const rd=orderReady(o), dbl=o.reqs.length>1;
+      const chips=o.reqs.map(r=>
+        `<div class="ochip" style="${tone(r.c,r.v)}">${VAL(r.v)}</div>`).join('');
+      return `<div class="ocard ${rd?'rdy':''} ${dbl?'dbl':''}">
+        <div class="chiprow">${chips}</div>
+        <button class="obtn ${rd?'on':''}" data-id="${o.id}">제출</button></div>`;
+    }).join('') + (rest>0?`<div class="omore">+${rest}</div>`:'');
+    el.querySelectorAll('.obtn.on').forEach(b=>b.onclick=()=>submit(+b.dataset.id));
+    el.scrollLeft = Math.min(keep, Math.max(0, el.scrollWidth-el.clientWidth));
+    S._osig = osig;
+  }
+  initRail(el);
+
+  const hi=new Set(), used=new Set();
+  for(const o of S.orders) if(orderReady(o))
+    for(const r of o.reqs){ const p=findEgg(r.c,r.v,used);
+      if(p){ hi.add(p.join('_')); used.add(p.join('_')) } }
+  boardEl.innerHTML='';
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+    const d=document.createElement('div'); d.className='cell'; d.dataset.k=y+'_'+x;
+    d.dataset.x=x;
+    if(x%2===1) d.classList.add('alt');
+    if(S.swapFirst&&S.swapFirst[0]===y&&S.swapFirst[1]===x) d.classList.add('pick');
+    if(y===0) d.classList.add('top');
+    d.onclick=()=>{ if(S.itemMode) applyItem(y,x); else tapCol(x) };
+    d.onpointerdown=()=>hiCol(x);
+    d.onpointerup=d.onpointerleave=()=>hiCol(-1);
+    const e=S.grid[y][x];
+    if(e){ d.style.cssText=tone(e.c,e.v); d.textContent=VAL(e.v);
+      d.classList.toggle('vhi', e.v>14);
+           if(e.v>=10) d.classList.add('xs'); else if(e.v>=7) d.classList.add('sm');
+           if(hi.has(y+'_'+x)) d.classList.add('pick') }
+    boardEl.appendChild(d);
+  }
+
+
+  const q=S.queue;
+  $('nx1').style.cssText=tone(q[0].c,q[0].v); $('nx1').textContent=VAL(q[0].v);
+  $('nx2').style.cssText=tone(q[1].c,q[1].v); $('nx2').textContent=VAL(q[1].v);
+  /* ★ v2.3 — 판 안에서는 "이번 판에 번 돈"만 보여준다.
+     보유 총액은 이 판의 판단에 아무 영향이 없다(인게임에 골드 소비처가 없다).
+     반대로 "지금까지 얼마 벌었나"는 계속 늘어나는 진척 신호라 매 납품마다 보상이 된다. */
+  $('coin').textContent=(S.roundGold||0).toLocaleString();
+  if(EMBED){
+    const bn=Math.floor(((roundLog&&roundLog.ships)||0)/4);
+    $('lootN').textContent = LOOT_BASE + bn;
+    $('lootB').textContent = bn ? '+'+bn : '';
+    const lm=$('lootM'); if(lm) lm.textContent = LOOT_TXT;
+  }
+  $('gemN').textContent=S.gem??0;
+  {const ge=$('gem'); if(ge) ge.textContent='💎 '+S.gem;}   // 인게임에선 제거됨
+  syncPetRow();
+  updWarn(anyReady());
+  flushFX();          // ★ I-1 — 노드를 다 만든 뒤 마지막에 연출을 얹는다
+}
+
+function buildItems(){
+  paintItems();
+  $('items').querySelectorAll('.item[data-k]').forEach(b=>b.onclick=()=>itemPopup(b.dataset.k));
+  $('cfgTop').onclick=settingsPopup;
+}
+/* hex를 흰쪽으로 a만큼 당긴다 (배지 그라디언트 상단색) */
+function up(h,a){ const c=i=>parseInt(h.slice(i,i+2),16);
+  const m=x=>Math.round(x+(255-x)*a);
+  return `rgb(${m(c(1))},${m(c(3))},${m(c(5))})` }
+function paintItems(){
+  $('items').innerHTML = ITEMS.map(it=>{
+    const n=S.items[it.k]||0;
+    return `<button class="item ${S.itemMode===it.k?'act':''}" data-k="${it.k}"
+      title="${it.n}" aria-label="${it.n}">${icon(it.k)}
+      <span class="ilock ${n?'have':''}" style="--bg1:${up(ICOL[it.k],.34)};--bg2:${ICOL[it.k]}">${n}</span></button>`;
+  }).join('');
+  $('items').querySelectorAll('.item[data-k]').forEach(b=>b.onclick=()=>itemPopup(b.dataset.k));
+}
+/* 아이템 아이콘 — 무채색이면 "게임 UI"가 아니라 "설정 메뉴"로 읽힌다. 기능별 색을 준다 */
+const ICOL={del:'#ff8f7a', swp:'#7fc4ff', up:'#a99bff', dn:'#7ee0a8', rbw:'#ffd166'};
+function icon(k){
+  const c=ICOL[k]||'#8b90a3';
+  const s=`width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 6px ${c}66)"`;
+  if(k==='del') return `<svg ${s}><circle cx="12" cy="12" r="7"/><path d="M9 9l6 6M15 9l-6 6"/></svg>`;
+  if(k==='swp') return `<svg ${s}><path d="M4 8h12l-3-3M20 16H8l3 3"/></svg>`;
+  // 알 하나가 한 단계 위로 / 아래로. 화살표 방향이 곧 기능이다
+  if(k==='up')  return `<svg ${s}><rect x="5.5" y="11" width="13" height="9.5" rx="2.4"/><path d="M12 8.2V2.4"/><path d="M8.6 5.6L12 2.2l3.4 3.4"/></svg>`;
+  if(k==='dn')  return `<svg ${s}><rect x="5.5" y="3.5" width="13" height="9.5" rx="2.4"/><path d="M12 15.8v5.8"/><path d="M8.6 18.4L12 21.8l3.4-3.4"/></svg>`;
+  if(k==='rbw') return `<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round">
+    <path d="M4 17a8 8 0 0 1 16 0" stroke="#ff7a59"/><path d="M7 17a5 5 0 0 1 10 0" stroke="#ffd166"/>
+    <path d="M10 17a2 2 0 0 1 4 0" stroke="#5aa9ff"/></svg>`;
+  return `<svg ${s}><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>`;
+}
+/* 모달 열고 닫기 —
+   dim=true 면 반투명 딤 + 우측 상단 골드만 위로. 닫을 때 반드시 원복해야
+   다음에 여는 전체화면 모달(일시정지·게임오버)에 딤이 새지 않는다 */
+function ovOpen(dim,gemMode){
+  const o=$('ov');
+  o.classList.toggle('dim',!!dim); o.classList.add('on');
+  const gp=$('goldPane'); if(gp) gp.classList.toggle('gemmode',!!gemMode);
+  document.querySelectorAll('#goldPane .gold, #goldPane .gemrow')
+    .forEach(g=>g.classList.toggle('raise',!!dim));
+}
+function ovClose(){
+  $('ov').classList.remove('on','dim','solid');
+  const sh=$('sheet'); if(sh) sh.className='sheet';
+  const gp=$('goldPane'); if(gp) gp.classList.remove('gemmode');
+  document.querySelectorAll('#goldPane .gold, #goldPane .gemrow')
+    .forEach(g=>g.classList.remove('raise'));
+}
+/* ★ v2.3 — 구매는 다이아로만. 골드 혼합 결제(구 buyCost)는 폐기.
+   이 빌드에서는 결제 자체가 미구현이라 버튼은 항상 성립시키고 토스트로 알린다. */
+/* 아이템 팝업 —
+   · 화면 전환 아님. 딤드 레이어 위에 얹고, 우측 상단 보유 골드만 딤 위로 올린다
+   · 보유 중이면 "사용하기"만 노출. 지금 필요한 건 쓰는 것이지 더 사는 게 아니다
+   · 구매 버튼 라벨 = 가격만("90G"). 동사는 아이콘 맥락으로 이미 전달된다 */
+function itemPopup(k){
+  const it=ITEMS.find(i=>i.k===k), n=S.items[k]||0;
+  $('sheet').innerHTML=`
+    <p class="big" style="font-size:20px">${it.n}</p>
+    <p class="sub" style="margin-bottom:16px">${it.d}<br>
+      <span class="tag">보드에서 약 ${it.cells}칸을 벌어줍니다</span>
+      ${n? `<br>보유 <b style="color:var(--ok)">${n}개</b>` : ''}</p>
+    <div class="prow">
+      ${n ? `<button class="mbtn use" id="useBtn">사용하기</button>` : ''}
+      <button class="mbtn buy able" id="buyBtn">💎 ${it.gem}</button>
+      <button class="mbtn close" id="closeBtn">닫기</button>
+    </div>
+    <div id="buyNote" class="buynote"></div>`;
+  ovOpen(true, true);        // 구매 창이 떠 있는 동안은 골드 자리에 다이아를 띄운다
+  $('closeBtn').onclick=ovClose;
+  if(n) $('useBtn').onclick=()=>{ ovClose(); startItem(k) };
+  $('buyBtn').onclick=()=>{
+    if(S.items[k]>=9){ toastMsg('보유 상한 9개'); return }
+    /* 결제 미구현 — 차감 없이 지급하고 버튼 옆에 사실만 적는다.
+       "구매 실패"로 막으면 프로토를 만져보는 사람이 아이템을 아예 못 쓴다. */
+    S.items[k]=(S.items[k]||0)+1; save(); paintItems(); render(); buzz([25,18,40]); SFX('coin');
+    const note=$('buyNote');
+    if(note){ note.textContent='이번 빌드에서는 구매 기능 미구현'; note.classList.add('on') }
+    setTimeout(()=>itemPopup(k), 900);
+  };
+}
+
+/* ---------- 아이템 사용 ---------- */
+const ITEM_MSG={del:'없앨 알을 고르세요', swp:'바꿀 알 두 개를 고르세요',
+  up:'한 단계 올릴 알을 고르세요', dn:'한 단계 내릴 알을 고르세요'};
+function startItem(k){
+  if(busy||S.over) return;
+  if(k==='rbw'){                      // 즉시 적용
+    S.items.rbw--; S.rainbowNext=true; S.queue[0]={c:'*', v:S.queue[0].v};
+    save(); paintItems(); render(); buzz([25,20,40]); SFX('coin'); return;
+  }
+  S.itemMode=k; S.swapFirst=null;
+  $('itemMsg').textContent=ITEM_MSG[k];
+  $('itembar').classList.add('on');
+  $('itemzone').classList.add('picking');
+  paintItems(); render();                 // ★ fitBoard 호출 안 함 — 보드 크기 불변
+}
+function endItem(){
+  S.itemMode=null; S.swapFirst=null;
+  $('itembar').classList.remove('on');
+  $('itemzone').classList.remove('picking');
+  paintItems(); render();
+}
+function applyItem(y,x){
+  const k=S.itemMode;
+  if(k==='swp'){
+    if(!S.grid[y][x]) return;
+    if(!S.swapFirst){ S.swapFirst=[y,x]; render(); return }
+    const [ay,ax]=S.swapFirst;
+    if(ay===y&&ax===x){ S.swapFirst=null; render(); return }
+    const t=S.grid[ay][ax]; S.grid[ay][ax]=S.grid[y][x]; S.grid[y][x]=t;
+  } else if(k==='del'){
+    if(!S.grid[y][x]) return;
+    S.grid[y][x]=null;
+  } else if(k==='up'){
+    const e=S.grid[y][x]; if(!e) return;
+    e.v++;
+  } else if(k==='dn'){
+    const e=S.grid[y][x]; if(!e) return;
+    if(e.v<=1){ toastMsg('더 내릴 수 없습니다'); return }
+    e.v--;
+  }
+  S.items[k]--; save(); buzz([35,25,55]); SFX('item');
+  endItem(); gravity(); render();
+  S.combo=0; S.comboColor=null;          // 아이템발 연쇄는 새 콤보로 센다
+  busy=true; defer(()=>scan(0),120);
+}
+function settingsPopup(){
+  $('sheet').innerHTML=`
+    <p class="big" style="font-size:20px">설정</p>
+    <p class="sub">소리는 <b>M</b> 키로도 바꿀 수 있습니다</p>
+    <div class="mrow">
+      <button id="sSound">${SFX.isOn()?'🔊 소리 켜짐':'🔇 소리 꺼짐'}</button>
+      <button id="sPets">펫 정보</button>
+      <button id="sGuide" class="ico"><svg class="bico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 6.5h7"/></svg>가이드</button>
+      <button id="sReset">처음부터</button>
+      <button id="sLobby">로비로 이동</button>
+    </div>
+    <button class="ghost" id="closeBtn">닫기</button>`;
+  ovOpen();
+  $('closeBtn').onclick=()=>ovClose();
+  $('sPets').onclick=()=>showPets(false,()=>settingsPopup());
+  $('sGuide').onclick=function(){ ovClose(); openGuide(0) };
+  $('sSound').onclick=function(){ const s=SFX.toggle();
+    this.textContent = s?'🔊 소리 켜짐':'🔇 소리 꺼짐' };
+  /* ★ v2.4 버그수정 — 브라우저 confirm() 은 모바일 웹뷰·인앱 브라우저에서 억제되거나
+     "이 페이지의 추가 대화상자 차단"이 켜지면 아무 반응 없이 false 를 반환한다.
+     그러면 버튼이 죽은 것처럼 보인다(실제 증상). 앱 내 확인 팝업으로 교체한다.
+     초기화 후에는 로비로 보낸다 — 진행도를 지웠는데 인게임에 남아 있으면
+     화면의 스테이지와 저장된 진행도가 어긋난다. */
+  $('sReset').onclick=()=>{
+    $('sheet').innerHTML=`
+      <p class="big" style="font-size:20px">처음부터 다시 할까요?</p>
+      <p class="sub" style="margin-bottom:18px">진행도·골드·다이아·펫 레벨이 <b style="color:#ff8f7a">전부 사라집니다.</b><br>되돌릴 수 없습니다.</p>
+      <div class="prow">
+        <button class="mbtn eq" id="rsYes" style="background:#ff7a59;color:#2a0f08">초기화</button>
+        <button class="mbtn close eq" id="rsNo">취소</button>
+      </div>`;
+    $('rsNo').onclick=()=>settingsPopup();
+    $('rsYes').onclick=()=>{
+      try{ localStorage.removeItem(SAVE) }catch(_){}
+      ovClose(); newGame(null); save(); openLobby();
+    };
+  };
+  $('sLobby').onclick=()=>{ save(); ovClose(); openLobby() };
+}
+
+/* ---------- 예고 신호 ---------- */
+function freeCells(){let n=0;for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++)if(!S.grid[y][x])n++;return n}
+function updWarn(ready){
+  const el=$('edge');
+  el.classList.toggle('ok', !!ready);        // className= 로 덮으면 발광(.fx)이 지워진다
+  if(ready && roundLog && !roundLog.readyAt) roundLog.readyAt=performance.now();
+  /* 위험 구간은 계측에만 남긴다 — 화면은 더 이상 물들이지 않는다 */
+  const lv=(()=>{ const f=freeCells(); return f<=2?3:f<=4?2:f<=6?1:0 })();
+  if(lv>S.warn){ buzz(lv===3?[60,40,60]:lv===2?[45]:[25]); if(lv>=2) SFX('warn');
+    if(roundLog&&!roundLog.warnAt) roundLog.warnAt=performance.now() }
+  S.warn=lv;
+}
+/* 인터랙션 발광 — 드롭은 약하게, 머지는 조금 세게. 둘 다 0.1~0.2초 안에 사라진다.
+   상시 신호가 아니라 "지금 뭔가 일어났다"는 확인이라, 남아 있으면 시끄러워진다. */
+let fxT=null;
+function edgeFx(c, strong){
+  const el=$('edge'); if(!el) return;
+  el.style.setProperty('--fxc', mixHex(c&&c!=='*'?hexOf(c):'#9aa0b5', strong?.26:.14));
+  el.classList.add('fx');
+  clearTimeout(fxT);
+  fxT=setTimeout(()=>el.classList.remove('fx'), strong?190:120);
+}
+function buzz(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(_){}}
+
+/* ── 사운드 ────────────────────────────────────────────────────────
+   오디오 파일을 싣지 않고 WebAudio 로 그때그때 굽는다. 이유는 두 가지다.
+   ① 이 게임의 성질이 "파일 하나로 도는 빌드"라 리소스를 늘리면 그게 깨진다.
+   ② 머지 사운드는 단계가 오를수록 음이 올라가야 한다 — 고정 샘플로는
+      14티어를 다 덮으려면 파일이 14개 필요하다. 주파수를 계산해서 쏘면 한 줄이다.
+   진동(buzz)과 짝으로 붙인다. 촉각·청각이 같은 사건에서 같이 나가야 타격이 생긴다. */
+const SFX=(function(){
+  const KEY='rogueMerge_sound';
+  let ac=null, bus=null, on=true;
+  try{ on = localStorage.getItem(KEY)!=='0' }catch(_){}
+
+  function ready(){
+    if(ac) { if(ac.state==='suspended') ac.resume().catch(()=>{}); return true }
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC) return false;
+    try{
+      ac=new AC();
+      const comp=ac.createDynamicsCompressor();   // 콤보 연쇄로 음이 겹칠 때 찢어지는 걸 막는다
+      comp.threshold.value=-18; comp.ratio.value=8; comp.attack.value=.003;
+      bus=ac.createGain(); bus.gain.value=.5;
+      bus.connect(comp); comp.connect(ac.destination);
+    }catch(_){ return false }
+    return true;
+  }
+  /* 한 음 = 오실레이터 + 지수 감쇠. 어택을 3ms 주는 이유는 0으로 시작하면
+     스피커에서 딸깍(클릭 노이즈)이 같이 나가기 때문이다. */
+  function tone(f, dur, {type='triangle', vol=.5, to=null, delay=0, glide=0}={}){
+    if(!on||!ready()) return;
+    const t=ac.currentTime+delay;
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type=type; o.frequency.setValueAtTime(f,t);
+    if(to) o.frequency.exponentialRampToValueAtTime(Math.max(30,to), t+(glide||dur));
+    g.gain.setValueAtTime(.0001,t);
+    g.gain.exponentialRampToValueAtTime(vol, t+.003);
+    g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+    o.connect(g); g.connect(bus);
+    o.start(t); o.stop(t+dur+.02);
+  }
+  function noise(dur, {vol=.25, delay=0, hp=800}={}){
+    if(!on||!ready()) return;
+    const t=ac.currentTime+delay, n=Math.floor(ac.sampleRate*dur);
+    const buf=ac.createBuffer(1,n,ac.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,2.2);
+    const src=ac.createBufferSource(); src.buffer=buf;
+    const f=ac.createBiquadFilter(); f.type='highpass'; f.frequency.value=hp;
+    const g=ac.createGain(); g.gain.value=vol;
+    src.connect(f); f.connect(g); g.connect(bus); src.start(t);
+  }
+  /* 머지 음계 — 단계가 올라도 불협이 안 나게 화음 안에서만 움직인다.
+     18칸까지 늘렸다: 연쇄가 길어질수록 계단을 계속 올라가야 콤보가 콤보로 들린다 */
+  const CH=[0,4,7,11,14,16,19,23,26,28,31,35,38,40,43,45,47,50];
+  const semi=n=>261.63*Math.pow(2,n/12);
+  /* 종 한 알 = 기음 + 3배음. 사각파의 '끾' 없이 '띵'이 난다 (매장과 같은 문법) */
+  const bell=(n,dur,vol,delay=0)=>{
+    tone(semi(n), dur, {type:'sine',vol,delay});
+    tone(semi(n)*3, dur*.45, {type:'sine',vol:vol*.22,delay:delay+.004});
+  };
+  /* 슉 — 밴드패스를 훑어 올린다. 매장 강화음과 같은 소리 */
+  function swoosh(dur,{vol=.22,delay=0,f0=520,f1=4600,q=1.1}={}){
+    if(!on||!ready()) return;
+    const t=ac.currentTime+delay, n=Math.max(1,Math.floor(ac.sampleRate*dur));
+    const buf=ac.createBuffer(1,n,ac.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/n);
+    const src=ac.createBufferSource(); src.buffer=buf;
+    const f=ac.createBiquadFilter(); f.type='bandpass'; f.Q.value=q;
+    f.frequency.setValueAtTime(f0,t);
+    f.frequency.exponentialRampToValueAtTime(f1,t+dur);
+    const g=ac.createGain(); g.gain.value=vol;
+    src.connect(f); f.connect(g); g.connect(bus); src.start(t); src.stop(t+dur+.02);
+  }
+
+  /* ── 팔레트 ────────────────────────────────────────────────
+     퍼즐은 초당 여러 번 소리가 난다 — 알 하나에 착지 1 + 연쇄 최대 8이
+     0.5초 안에 몰린다. 그래서 음색을 늘리지 않고 넷으로 묶었다.
+       톡(착지) < 띵(병합) < 띠링(제출) < 팡파레(클리어)
+     음량 서열이 이 순서를 벗어나면 가장 자주 나는 소리가 가장 시끄러워진다.
+     UI·경고·아이템은 매장의 찰칵·슉을 그대로 쓴다 — 두 화면이 형제로 들려야 한다 */
+  const A={
+    /* 찰칵 — 매장 포스기와 같은 소리 */
+    tap:   ()=>{ noise(.014,{vol:.24,hp:3200}); tone(170,.035,{type:'sine',vol:.09,to:120}); },
+    /* 톡 — 가장 자주 나는 소리라 가장 작다. 노이즈를 빼고 몸통만 남겼다 */
+    land:  ()=>{ tone(140,.055,{type:'sine',vol:.13,to:105}); },
+    /* 띵 — 단계(tier)가 기본 높이를, 연쇄(depth)가 계단을 만든다.
+       연쇄가 이어지는 동안 음이 계속 올라가서, 긴 콤보가 상행 아르페지오로 들린다.
+       4연쇄부터는 옥타브 위에 반짝을 하나 더 얹는다 */
+    merge: (tier,depth)=>{
+      const d=Math.max(0,Math.min(depth|0,8));
+      const i=Math.min(CH.length-1, Math.max(0,(tier|0)) + d);
+      bell(CH[i], .14, .26);
+      if(d>=4) bell(CH[i]+12, .10, .07, .02);
+    },
+    /* 띠링 — 제출. 매장에서 손님이 돈 낼 때와 완전히 같은 소리다.
+       "제출 = 돈"을 설명 없이 귀로 잇는다 */
+    ship:  ()=>{ bell(24,.10,.22); bell(31,.22,.19,.055); },
+    /* 팡파레 — 슉으로 끌어올리고 띠링 4연타로 닫는다 (매장 레벨업의 형제) */
+    clear: ()=>{ swoosh(.26,{vol:.22,f0:400,f1:6500});
+                 [24,28,31,36].forEach((n,k)=> bell(n,.34,.26,.22+k*.075)); },
+    /* 실패 — 띠링을 뒤집는다. 톱니로 긁지 않는다 */
+    fail:  ()=>{ bell(19,.16,.16); bell(12,.26,.13,.09); bell(5,.38,.10,.20); },
+    /* 경고 — 찰칵의 저음판. 삑 소리를 내지 않는다 */
+    warn:  ()=>{ noise(.02,{vol:.11,hp:900}); tone(120,.11,{type:'sine',vol:.13,to:85}); },
+    /* 아이템 구매 — 슉 + 띵 */
+    coin:  ()=>{ swoosh(.16,{vol:.18,f0:600,f1:3800}); bell(31,.18,.16,.14); },
+    /* 아이템 발동 — 짧은 슉 */
+    item:  ()=>{ swoosh(.20,{vol:.22,f0:700,f1:5600,q:.9}); },
+    open:  ()=>{ noise(.012,{vol:.15,hp:2800}); tone(200,.03,{type:'sine',vol:.07,to:150}); },
+    /* 알바몬 레벨업 — 매장 강화와 같은 슉슉 */
+    up:    ()=>{ swoosh(.17,{vol:.22,f0:500,f1:4200});
+                 swoosh(.20,{vol:.22,f0:700,f1:6000,delay:.13});
+                 bell(31,.24,.18,.30); },
+  };
+  function play(name,a,b){ if(!on||(typeof SYNC!=='undefined'&&SYNC)) return; const f=A[name]; if(f) try{ f(a,b) }catch(_){} }
+  play.isOn = ()=>on;
+  play.toggle = ()=>{ on=!on; try{ localStorage.setItem(KEY,on?'1':'0') }catch(_){}
+                      if(on) play('open'); return on };
+  play.unlock = ()=>{ if(on) ready() };
+  return play;
+})();
+/* 브라우저는 사용자 제스처 전에는 오디오를 못 열게 막는다. 첫 입력에서 한 번 연다 */
+['pointerdown','keydown','touchend'].forEach(ev=>
+  addEventListener(ev, ()=>SFX.unlock(), {once:true,passive:true}));
+/* UI 클릭음 — 보드는 착지음이 따로 나가므로 뺀다(두 소리가 겹치면 타격이 뭉갠다) */
+addEventListener('pointerdown', e=>{
+  if(!e.target||!e.target.closest) return;
+  if(e.target.closest('#board')) return;
+  if(e.target.closest('button,.lcard,.srow,.pcard,.ord')) SFX('tap');
+}, true);
+addEventListener('keydown', e=>{
+  if(e.key==='m'||e.key==='M'){ const s=SFX.toggle(); toastMsg(s?'소리 켜짐':'소리 꺼짐') }
+});
+
+/* ---------- 드롭 · 병합 ---------- */
+let queueTaps=[];
+const fastMode=()=>queueTaps.length>0;   // 밀린 입력이 있으면 연출을 줄인다
+/* ★ v2.4 — 타이밍 주입. 코어(drop→step→finishMerge→scan→submit)는 setTimeout 을 직접
+   부르지 않고 defer 를 부른다. SYNC=true 면 즉시 실행이라 **같은 함수가 동기로 돈다.**
+   이게 "시뮬 ≠ 프로토" 문제의 구조적 해법이다 — 별도 시뮬 구현을 두면 두 코드가
+   갈라져도 아무도 모른다. 여기서는 시뮬이 곧 프로토다. 갈라질 코드가 없다. */
+let SYNC=false;
+const defer=(fn,ms)=>{ if(SYNC){ fn(); return 0 } return setTimeout(fn,ms) };
+// 필드 아무 칸이나 누르면 그 열로 떨어진다 — 처리 중이면 큐에 쌓아 순서대로 내려간다
+/* 꽉 찬 열이라도 최상단 알과 색·숫자가 같으면 드롭 가능 (합쳐지므로) */
+function topMergeable(x,egg){
+  const t=S.grid[0][x];
+  return !!(t && t.v===egg.v && (t.c===egg.c||t.c==='*'||egg.c==='*'));   // 값 상한 없음
+}
+const canPlace=egg=>{ for(let x=0;x<COLS;x++) if(!S.grid[0][x]||topMergeable(x,egg)) return true; return false };
+function tapCol(x){
+  if(S.over||S.itemMode) return;
+  if(busy){ if(queueTaps.length<6) queueTaps.push(x); return }
+  if(S.grid[0][x] && !topMergeable(x,S.queue[0])){   // 막힌 열이면 흔들어 알린다
+    boardEl.querySelectorAll(`[data-x="${x}"]`).forEach(c=>{
+      c.classList.remove('blocked'); void c.offsetWidth; c.classList.add('blocked') });
+    buzz([18,40,18]); SFX('warn'); return;
+  }
+  drop(x);
+}
+function hiCol(x){
+  boardEl.querySelectorAll('.cell').forEach(c=>
+    c.classList.toggle('colhi', x>=0 && +c.dataset.x===x && !S.grid[+c.dataset.k.split('_')[0]][x]));
+}
+/* 죽은 알 = 상하좌우에 같은 색이 하나도 없는 알 (납품 우선순위 1순위 규칙과 동일) */
+/* ★ v2.4 (I-2) — "죽은 알" 판정을 색이 아니라 **쓸모**로 바꿨다.
+   구 정의(상하좌우에 같은 색이 없음)는 유효 색이 1종이 되는 구간에서 무력해진다.
+   전부 같은 색이니 거의 아무것도 죽지 않고, 되살리기가 0~1칸만 지우고 끝난다.
+   실제로 "죽은 알"이란 **이 판에서 더 이상 쓸 데가 없는 알**이다. 세 가지로 판정한다.
+     ① 같은 색 이웃이 없다            — 인접 머지 가망 없음 (기존 정의)
+     ② 그 값이 남은 목표 어디에도 안 쓰이고, 위로 올려도 도달할 목표가 없다
+     ③ 이미 그 색의 최대 목표값을 넘겼다 — 영원히 못 낸다 (상한을 없앤 뒤 새로 생긴 경우)
+   ③은 값 상한 제거(v2.4)의 대가다. 무한히 커질 수 있으니 "너무 커진 알"이 실재한다. */
+function deadCells(){
+  const out=[];
+  const liveGoals=S.goals.filter(g=>g.done<g.need);
+  const maxOf={};                      // 색별 남은 최대 목표값
+  for(const g of liveGoals) maxOf[g.c]=Math.max(maxOf[g.c]||0, g.v);
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+    const e=S.grid[y][x]; if(!e) continue;
+    if(e.c==='*') continue;            // 무지개는 어디든 쓰인다
+    const cap=maxOf[e.c];
+    if(cap===undefined || e.v>cap){ out.push([y,x]); continue }   // ②③ 쓸 데 없음 / 넘어섬
+    let live=false;
+    for(const [ny,nx] of [[y-1,x],[y+1,x],[y,x-1],[y,x+1]]){
+      if(ny<0||ny>=ROWS||nx<0||nx>=COLS) continue;
+      const o=S.grid[ny][nx];
+      if(o&&(o.c===e.c||o.c==='*'||e.c==='*')){ live=true; break }
+    }
+    if(!live) out.push([y,x]);         // ① 붙을 이웃 없음
+  }
+  return out;
+}
+function drop(x){
+  if(busy||S.over) return;
+  const topFull=!!S.grid[0][x];
+  if(topFull && !topMergeable(x,S.queue[0])) return;
+  busy=true; S.combo=0; S.comboColor=null;
+  const egg=S.queue.shift(); fillQueue();
+  S.comboColor=egg.c==='*'?null:egg.c;
+  roundLog.drops.push({t:Math.round(performance.now()-roundLog.t0),col:x,v:egg.v,c:egg.c});
+  S.T.drops++;
+  if(topFull){                       // 최상단 합체 — 알이 보드에 안 들어오고 그 자리에서 한 단계 오른다
+    const t=S.grid[0][x];
+    S.grid[0][x]={c:(t.c==='*'?(egg.c==='*'?t.c:egg.c):t.c), v:t.v+1};
+    roundLog.cellsMerged+=1; S.T.cellsMerged+=1;   // 드롭 +1, 제거 +1 → 순증 0
+    S.combo=1; buzz([16,14,10]); SFX('merge', tierOf(S.grid[0][x].c,S.grid[0][x].v), 0); edgeFx(egg.c,true);
+    $('pipHint').classList.add('hide');
+    fxCell(0,x,'mg'); reactPet(egg.c); render();
+    defer(()=>scan(1), fastMode()?70:140); return;
+  }
+  let y=0; while(y+1<ROWS&&!S.grid[y+1][x])y++;
+  S.grid[y][x]=egg; buzz([12]); SFX('land'); edgeFx(egg.c,false);
+  $('pipHint').classList.add('hide');
+  if(!S.firstTap){ S.firstTap=true; $('boardHint').classList.add('gone') }
+  /* fitBoard 재실행 제거 — 힌트가 자리를 회수하지 않으므로 다시 잴 이유가 없다.
+     남겨두면 380ms 뒤에 보드가 한 번 더 미세하게 움직인다(두 번째 흔들림) */
+  reactPet(egg.c); petSay(egg.c); render();
+  const c=boardEl.querySelector(`[data-k="${y}_${x}"]`);
+  if(c){ c.style.setProperty('--fd', `-${(y+1)*112}%`); c.classList.add('drop') }   // --fd 는 y 의존이라 큐로 못 옮긴다
+  defer(()=>step(y,x,0), fastMode()?80:150);
+}
+// 인접(상하좌우)한 같은 색·같은 숫자를 전부 잇는다
+function group(y,x){
+  const base=S.grid[y][x]; if(!base) return [];
+  const seen=new Set([y+'_'+x]), st=[[y,x]], out=[[y,x]];
+  while(st.length){
+    const [cy,cx]=st.pop();
+    for(const [ny,nx] of [[cy-1,cx],[cy+1,cx],[cy,cx-1],[cy,cx+1]]){
+      if(ny<0||ny>=ROWS||nx<0||nx>=COLS) continue;
+      const k=ny+'_'+nx; if(seen.has(k)) continue;
+      const e=S.grid[ny][nx];
+      if(!e||e.v!==base.v) continue;
+      if(!(e.c===base.c||e.c==='*'||base.c==='*')) continue;   // 무지개는 아무 색과
+      seen.add(k); st.push([ny,nx]); out.push([ny,nx]);
+    }
+  }
+  return out;
+}
+// 2개=+1 · 3개=+2 · 4개 이상=+3
+const stepUp=n=>Math.min(n-1,3);
+function step(y,x,depth){
+  const g=group(y,x);
+  if(g.length>=2){
+    // ① 흡수 연출: 주변 알이 중심으로 빨려든다
+    const cell=i=>boardEl.querySelector(`[data-k="${i[0]}_${i[1]}"]`);
+    const base=cell([y,x]); const br=base&&base.getBoundingClientRect();
+    for(const [gy,gx] of g){
+      if(gy===y&&gx===x) continue;
+      const el=cell([gy,gx]); if(!el||!br) continue;
+      const r=el.getBoundingClientRect();
+      el.style.setProperty('--ax',(br.left-r.left)+'px');
+      el.style.setProperty('--ay',(br.top-r.top)+'px');
+      el.classList.add('absorb');
+    }
+    defer(()=>finishMerge(y,x,g,depth), fastMode()?55:105);
+    return;
+  }
+  gravity(); render();
+  defer(()=>scan(depth+1), fastMode()?25:45);
+}
+function finishMerge(y,x,g,depth){
+    /* ★ 경합 가드 — step()이 흡수 연출 55~105ms 뒤에 이 함수를 예약한다.
+       그 사이에 납품(submit)·아이템으로 대상 칸이 사라질 수 있다.
+       가드가 없으면 S.grid[y][x] 가 null 이라 크래시하고, 살아남아도 이미 없는 칸을
+       "머지로 제거"로 계상해 회계 항등식이 깨진다. 예약 시점이 아니라 실행 시점의 보드로 다시 판정한다. */
+    const abort=()=>{ gravity(); render(); defer(()=>scan(depth+1), fastMode()?70:140) };
+    const e=S.grid[y][x];
+    if(!e){ abort(); return }
+    g=g.filter(([gy,gx])=>{ const o=S.grid[gy][gx];
+      return o && o.v===e.v && (o.c===e.c||o.c==='*'||e.c==='*') });
+    if(g.length<2){ abort(); return }
+    // 무지개가 섞이면 결과는 실제 색을 따른다
+    let rc=e.c;
+    if(rc==='*') for(const [gy,gx] of g){ const o=S.grid[gy][gx];
+      if(o&&o.c!=='*'){ rc=o.c; break } }
+    for(const [gy,gx] of g) if(gy!==y||gx!==x) S.grid[gy][gx]=null;
+    S.grid[y][x]={c:rc, v:e.v+stepUp(g.length)};
+    S.combo++; roundLog.merges++; if(depth>0)roundLog.chains++;
+    edgeFx(rc,true);                          // 합쳐지는 순간 그 색으로 짧게
+    roundLog.cellsMerged+=g.length-1; S.T.cellsMerged+=g.length-1;   // ★ 줄어든 칸
+    if(S.combo>=2){ S.lastCombo=S.combo; S.lastColor=S.comboColor||e.c;
+      if(S.combo>S.best){ S.best=S.combo; save() }
+      showCombo(S.combo, S.lastColor) }
+    buzz([14+Math.min(depth,3)*10, 20, 8]); SFX('merge', tierOf(rc, e.v+stepUp(g.length)), depth);
+    gravity(); fxCell(y,x,'mg'); render();
+    defer(()=>scan(depth+1), fastMode()?70:140);
+}
+// 알은 위에서 떨어져 바닥부터 쌓인다
+function gravity(){
+  for(let x=0;x<COLS;x++){
+    const col=[]; for(let y=ROWS-1;y>=0;y--) if(S.grid[y][x]) col.push(S.grid[y][x]);
+    for(let y=ROWS-1,i=0;y>=0;y--,i++) S.grid[y][x]=col[i]||null;
+  }
+}
+function scan(depth){
+  if(depth<=16){
+    for(let y=ROWS-1;y>=0;y--)for(let x=0;x<COLS;x++){
+      if(!S.grid[y][x])continue;
+      if(group(y,x).length>=2){ step(y,x,depth); return }
+    }
+  }
+  busy=false; render();
+  /* 게임오버 = 최상단 칸을 점유하면서 다음 알이 어디와도 합쳐질 수 없을 때 (+ 제출 가능 카드도 없을 때) */
+  if(!canPlace(S.queue[0]) && !anyReady()){ queueTaps=[]; return failStage() }
+  if(queueTaps.length){
+    const nx=queueTaps.shift();
+    if(!S.grid[0][nx]) return drop(nx);
+    return defer(()=>scan(0),0);
+  }
+}
+
+/* ---------- 납품 ---------- */
+function submit(id){
+  if(busy)return;
+  const oi=S.orders.findIndex(o=>o.id===id); if(oi<0)return;
+  const o=S.orders[oi];
+  const used=new Set(), picks=[];
+  for(const r of o.reqs){
+    const p=findEgg(r.c,r.v,used); if(!p) return;
+    used.add(p.join('_')); picks.push({p,r});
+  }
+  busy=true; buzz([50,40,90]); SFX('ship');
+  for(const {p,r} of picks){ reactPet(r.c); fxCell(p[0],p[1],'ship') }
+  render();
+  defer(()=>{
+    let gain=0;
+    for(const {p,r} of picks){
+      S.grid[p[0]][p[1]]=null;
+      const g=S.goals.find(g=>g.c===r.c&&g.v===r.v); if(g)g.done++;
+      gain+=goldOf(r.c,r.v);
+      roundLog.cellsDelivered++; S.T.cellsDelivered++;               // ★ 줄어든 칸
+    }
+    if(picks.length>1) gain=Math.round(gain*1.5);   // 복합 납품 보너스
+    gravity();
+    S.orders.splice(oi,1);
+    S.coin+=gain; S.roundGold=(S.roundGold||0)+gain; roundLog.ships++;
+    if(S.goals.every(g=>g.done>=g.need)){ busy=false; return clearStage() }
+    /* ★ v2.2 — 납품으로 알이 빠지면 중력으로 위가 내려앉고, 거기서 새 인접이 생긴다.
+       예전엔 render()만 하고 끝나서 눈앞에 같은 색·같은 숫자가 붙어 있는데도 안 합쳐졌다.
+       (아이템 쪽은 원래 scan을 돌고 있었다 — 납품만 빠져 있던 구멍)
+       busy는 유지한 채 scan에 넘긴다. scan이 연쇄를 다 풀고 busy를 내린다. */
+    S.combo=0; S.comboColor=null;
+    render(); scan(0);
+  },560);
+}
+
+/* ---------- 스테이지 판정 ---------- */
+function stageStart(){
+  S.roundGold=0;                         // ★ 인게임 표기는 누적 보유가 아니라 이번 판 수입
+  roundLog={stage:S.stage,t0:performance.now(),drops:[],merges:0,chains:0,ships:0,
+    cellsMerged:0,cellsDelivered:0,delta:null,
+    warnAt:null,readyAt:null,endBy:null,durMs:null,waitMs:null,blurs:0};
+}
+function stageEnd(by){
+  roundLog.endBy=by;
+  // ★ 회계 항등식: 점유 = 드롭 − 머지제거 − 납품제거.  δ = 1 − 제거/드롭
+  const n=roundLog.drops.length, rm=roundLog.cellsMerged+roundLog.cellsDelivered;
+  roundLog.delta = n? +(1-rm/n).toFixed(4) : null;
+  roundLog.S_pred = roundLog.delta>0? Math.round(30/roundLog.delta) : null;
+  roundLog.ledgerOK = (n-rm)===(ROWS*COLS-freeCells());
+  roundLog.durMs=Math.round(performance.now()-roundLog.t0);
+  roundLog.warnLeadMs=roundLog.warnAt?Math.round(performance.now()-roundLog.warnAt):null;
+  roundLog.readyToShipMs=roundLog.readyAt?Math.round(performance.now()-roundLog.readyAt):null;
+  S.T.stages.push(roundLog);
+}
+function clearStage(){
+  if(SYNC){ S.over=true; S.simClear=true; stageEnd('clear'); return }
+  S.over=true; stageEnd('clear'); waitT0=performance.now(); render(); SFX('clear');
+  if(EMBED){
+    const chips = LOOT2.map(x=>`
+      <span class="lchip">
+        <i style="color:${x.c}">${x.g}</i>
+        <em>${x.e}</em><b>${x.n}</b>
+        <u>${x.a===x.b?x.a:x.a+'~'+x.b}</u></span>`).join('');
+    /* 클리어는 '사건'이다. 판이 비쳐 보이면 사건이 안 된다 — 불투명 패널로 덮는다 */
+    $('sheet').className='sheet panel';
+    $('sheet').innerHTML=`
+      <div style="font-size:44px;line-height:1;margin-bottom:6px">🧺</div>
+      <p class="big" style="font-size:26px">${(EMBED.name||('사냥터 '+S.stage)).replace(/^S\d+\s*/,'')}</p>
+      <p class="big" style="font-size:26px;color:var(--ok);margin-top:-2px">클리어!</p>
+      <p class="sub" style="margin:6px 0 22px">주문 <b>${roundLog.ships}</b>건 납품 완료</p>
+      <div style="font-size:11px;font-weight:900;letter-spacing:.06em;color:#8d93a6;text-align:left;margin-bottom:8px">획득 재료</div>
+      <div class="lrail" style="margin-bottom:22px">${chips}</div>
+      <button class="mbtn use" id="backBtn" style="width:100%">재료 챙겨서 매장으로</button>`;
+    $('ov').classList.add('solid');
+    ovOpen(false);
+    $('backBtn').onclick=()=>post('clear');
+    return;
+  }
+  const nx=S.stage+1;
+  const newPet=PETS.find(p=>p.at===nx&&S.lv[p.k]===0);
+  if(newPet) S.lv[newPet.k]=1;
+  S.stage=nx; save();
+  /* 화면 전환이 아니라 판 위에 얹는 딤드 팝업 — 방금 만든 보드가 보인 채로 끝나야 한다.
+     버튼은 다음 스테이지 / 로비로 이동 두 개, 동일 크기 */
+  $('sheet').innerHTML=`
+    <p class="big">${nx-1}단계 완료</p>
+    <p class="sub" style="margin-bottom:18px">이번 판 획득 <b style="color:var(--gold)">+${(S.roundGold||0).toLocaleString()}G</b> · 보유 <b>${S.coin.toLocaleString()}G</b>${newPet?`<br><b style="color:${newPet.hex}">${newPet.n} 펫이 합류했습니다</b>`:''}</p>
+    <div class="prow">
+      <button class="mbtn use eq" id="nowBtn">다음 스테이지</button>
+      <button class="mbtn close eq" id="lobbyBtn">로비로 이동</button>
+    </div>
+    <p class="hint">게임은 여기서 멈춰 있습니다.</p>`;
+  ovOpen(true);
+  $('lobbyBtn').onclick=()=>{ roundLog.waitMs=Math.round(performance.now()-waitT0);
+    save(); ovClose(); openLobby() };
+  $('nowBtn').onclick=()=>{
+    roundLog.waitMs=Math.round(performance.now()-waitT0);
+    S.over=false; busy=false; S.warn=0; S.lastCombo=0; S.lastColor=null; queueTaps=[];
+    S.revived=false; S.reviveDrop=null;
+    buildStage(); stageStart();
+    ovClose(); render(); restBubble();
+  };
+}
+function failStage(){
+  if(S.revived && S.reviveDrop!=null && roundLog.drops.length-S.reviveDrop<=REVIVE_REFUND_DROPS){
+    S.gem+=REVIVE_GEM; roundLog.refunded=true; toastMsg(`💎 ${REVIVE_GEM} 환불 — ${REVIVE_REFUND_DROPS}드롭 안에 다시 막혔습니다`);
+  }
+  if(SYNC){ S.over=true; S.simClear=false; stageEnd('full'); return }
+  S.over=true; stageEnd('full'); waitT0=performance.now(); save(); SFX('fail');
+  const dead=deadCells(), canRevive=!S.revived&&S.gem>=REVIVE_GEM;
+  if(EMBED){
+    $('sheet').innerHTML=`
+      <p class="big">보드 가득</p>
+      <p class="sub">더 놓을 자리가 없습니다.<br>돌아가면 <b style="color:#ff8fa0">하트 1</b>을 잃습니다.</p>
+      ${canRevive?`<div><button class="now" id="revBtn" style="background:var(--gold);color:#2a1f00;line-height:1.35">
+          💎 ${REVIVE_GEM} 되살리기<br><span style="font-size:11px;font-weight:600">죽은 알 ${dead.length}개를 없앱니다</span></button></div>`:''}
+      <div style="margin-top:${canRevive?'10px':'0'}">
+        <button class="${canRevive?'ghost':'now'}" id="giveBtn">매장으로 돌아가기</button>
+      </div>`;
+    ovOpen();
+    if(canRevive) $('revBtn').onclick=()=>revive(dead);
+    $('giveBtn').onclick=()=>post('fail');
+    return;
+  }
+  $('sheet').innerHTML=`
+    <p class="big">보드 가득</p>
+    <p class="sub">이 단계를 다시 시작합니다.<br>모은 골드는 그대로입니다.</p>
+    ${canRevive?`<div><button class="now" id="revBtn" style="background:var(--gold);color:#2a1f00;line-height:1.35">
+        💎 ${REVIVE_GEM} 되살리기<br><span style="font-size:11px;font-weight:600">죽은 알 ${dead.length}개를 없앱니다</span></button></div>`:''}
+    <div style="margin-top:${canRevive?'10px':'0'}">
+      <button class="${canRevive?'ghost':'now'}" id="nowBtn">다시</button>
+      <button class="ghost" id="petBtn">펫 정보</button>
+    </div>
+    ${S.revived?'<p class="hint">이번 판은 이미 되살렸습니다</p>':''}`;
+  ovOpen();
+  if(canRevive) $('revBtn').onclick=()=>revive(dead);
+  $('nowBtn').onclick=()=>{
+    roundLog.waitMs=Math.round(performance.now()-waitT0);
+    S.over=false; busy=false; S.warn=0; S.lastCombo=0; S.lastColor=null; queueTaps=[];
+    S.revived=false; S.reviveDrop=null;
+    buildStage(); stageStart();
+    ovClose(); render(); restBubble();
+  };
+  $('petBtn').onclick=()=>showPets(false,()=>failStage());
+}
+/* 되살리기 — 죽은 알만 제거. 5드롭 안에 다시 막히면 다이아 환불 */
+function revive(dead){
+  if(S.revived||S.gem<REVIVE_GEM) return;
+  S.gem-=REVIVE_GEM; S.revived=true; S.over=false; busy=false;
+  S.reviveDrop=roundLog.drops.length; roundLog.revived=true;
+  for(const [y,x] of dead) S.grid[y][x]=null;
+  gravity(); save(); buzz([40,30,70]); SFX('up');
+  ovClose();
+  stageStart(); render();
+  S.combo=0; S.comboColor=null;
+  busy=true; defer(()=>scan(0),120);   // ★ 되살리기도 연쇄를 풀어야 한다
+  if(!dead.length) toastMsg('없앨 죽은 알이 없었습니다');
+}
+let toastT=null;
+function toastMsg(m){
+  let el=$('toastM');
+  if(!el){ el=document.createElement('div'); el.id='toastM';
+    el.style.cssText='position:fixed;left:50%;top:22%;transform:translateX(-50%);z-index:90;'+
+      'background:#232735;border:1px solid #343b4f;color:#e8e9ef;font-size:12px;font-weight:800;'+
+      'padding:9px 16px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none';
+    document.body.appendChild(el) }
+  el.textContent=m; el.style.opacity='1';
+  clearTimeout(toastT); toastT=setTimeout(()=>el.style.opacity='0',1500);
+}
+
+/* ---------- 펫 정보 / 펫 관리 ---------- */
+function showPets(manage, back){
+  ovOpen();
+  const draw=()=>{
+    $('sheet').innerHTML=`
+      <p class="big" style="font-size:20px">${manage?'펫 관리':'펫 정보'}</p>
+      ${manage? `<p class="sub">보유 골드 <b style="color:var(--txt)">${S.coin}</b></p>`
+               : `<p class="sub">레벨이 오르면 높은 숫자가 더 자주 나옵니다</p>`}
+      <div class="pgrid">${PETS.map(p=>{
+        const lv=S.lv[p.k];
+        if(!lv) return `<div class="pcard lock">${petSVG(p.k,52)}
+          <div class="pname">${p.n}</div>
+          <div class="tag">${p.at}단계에서 합류</div></div>`;
+        const d=distOf(lv);
+        let show=1; for(let i=d.length-1;i>=0;i--) if(d[i]>0){ show=i+1; break }   // 최고 등장값
+        const max=lv>=MAXLV(), c=max?null:costOf(lv), can=!max&&S.coin>=c;
+        return `<div class="pcard">${petSVG(p.k,52)}
+          <div class="pmeta">
+            <div class="gchip" style="${tone(p.k,show)}">${VAL(show)}</div>
+            <span class="pname" style="color:${p.hex}">${p.n} Lv${lv}</span>
+          </div>
+          <button class="pbtn" data-info="${p.k}">상세 정보 보기</button>
+          ${manage?(max?`<button class="pbuy">MAX</button>`
+                       :`<button class="pbuy ${can?'on':''}" data-up="${p.k}" data-c="${c}">강화 ${c} G</button>`):''}
+        </div>`;
+      }).join('')}</div>
+      <button class="ghost" id="backBtn" style="margin-top:12px">돌아가기</button>`;
+    $('sheet').querySelectorAll('[data-info]').forEach(b=>
+      b.onclick=()=>petDetail(b.dataset.info, ()=>showPets(manage,back)));
+    $('sheet').querySelectorAll('.pbuy.on').forEach(b=>b.onclick=()=>{
+      const c=+b.dataset.c; if(S.coin<c)return;
+      S.coin-=c; S.lv[b.dataset.up]++; save(); buzz([30,20,50]); SFX('up'); draw();
+    });
+    $('backBtn').onclick=back;
+  };
+  draw();
+}
+function petDetail(k,back){
+  const p=PETS.find(p=>p.k===k), lv=S.lv[k], d=distOf(lv);
+  const rows=[];
+  for(let v=1;v<=GEN_VMAX;v++){
+    const pr=(d[v-1]||0)*100;
+    rows.push(`<tr>
+      <td><div class="gchip" style="${tone(k,v)};display:inline-flex;vertical-align:middle"></div>
+        <span class="vnum ${pr>0?'nz':'z'}" style="margin-left:9px">${VAL(v)}</span></td>
+      <td class="${pr>0?'nz':'z'}">${pr>0?pr.toFixed(0)+'%':'0%'}</td></tr>`);
+  }
+  $('sheet').innerHTML=`
+    ${petSVG(k,64)}
+    <p class="big" style="font-size:19px;color:${p.hex};margin-top:4px">${p.n} Lv${lv}</p>
+    <p class="sub" style="margin-bottom:8px">이 펫에서 나오는 알의 등장 확률</p>
+    <table class="ptab">${rows.join('')}</table>
+    <p class="hint">확률 0인 숫자는 보드에서 합쳐야 만들 수 있습니다.</p>
+    <button class="ghost" id="backBtn">돌아가기</button>`;
+  $('backBtn').onclick=back;
+}
+
+/* ---------- 인게임 가이드 ---------- */
+let gdI=0;
+function openGuide(i){
+  gdI=i||0;
+  $('gdDots').innerHTML=GUIDE.map(function(_,k){ return '<span class="gdot" data-i="'+k+'"></span>' }).join('');
+  $('gdTot').textContent=GUIDE.length;
+  $('guide').classList.add('on');
+  paintGuide();
+}
+function paintGuide(){
+  var p=GUIDE[gdI];
+  $('gdTitle').textContent=p.tag+' 가이드';
+  var has=!!(p.cuts&&p.cuts.length);
+  var cuts=has
+    ? '<div class="gcuts">'+p.cuts.map(function(c){
+        return '<figure><img src="'+c.src+'" alt=""><figcaption>'+c.cap+'</figcaption></figure>' }).join('')+'</div>'
+    : '';
+  $('gdBody').innerHTML='<div class="gph"><span class="gbadge">'+p.n+'</span><h2>'+p.title+'</h2></div>'
+    +'<div class="gpb '+(has?'has':'full')+'">'+cuts+'<div class="gtxt">'+p.body+'</div></div>';
+  $('gdMain').scrollTop=0;
+  $('gdCur').textContent=gdI+1;
+  $('gdPrev').disabled=gdI===0; $('gdNext').disabled=gdI===GUIDE.length-1;
+  $('gdDots').querySelectorAll('.gdot').forEach(function(d){ d.classList.toggle('on', +d.dataset.i===gdI) });
+}
+function gdGo(n){ gdI=Math.max(0,Math.min(GUIDE.length-1,n)); paintGuide() }
+$('gdPrev').onclick=function(){ gdGo(gdI-1) };
+$('gdNext').onclick=function(){ gdGo(gdI+1) };
+$('gdClose').onclick=function(){ $('guide').classList.remove('on') };
+$('gdDots').onclick=function(e){ var d=e.target.closest('.gdot'); if(d) gdGo(+d.dataset.i) };
+(function(){ var sx=null, m=$('guide');
+  m.addEventListener('touchstart',function(e){ sx=e.touches[0].clientX },{passive:true});
+  m.addEventListener('touchend',function(e){ if(sx==null) return;
+    var dx=e.changedTouches[0].clientX-sx; sx=null;
+    if(Math.abs(dx)>60) gdGo(dx<0? gdI+1 : gdI-1) },{passive:true});
+})();
+addEventListener('keydown',function(e){ if(!$('guide').classList.contains('on')) return;
+  if(e.key==='ArrowRight') gdGo(gdI+1);
+  if(e.key==='ArrowLeft') gdGo(gdI-1);
+  if(e.key==='Escape') $('guide').classList.remove('on') });
+
+/* ---------- 로비 ---------- */
+let lobbyPick=null;
+function openLobby(){
+  const sv=load()||{stage:S?S.stage:1};
+  if(lobbyPick==null) lobbyPick=sv.stage;
+  $('lbGold').textContent=(sv.coin||0).toLocaleString();
+  $('lbGem').textContent=sv.gem??20;
+  $('lobbyInfo').textContent=`최고 ${sv.best||0} COMBO`;
+  $('lbNum').textContent=lobbyPick;
+  // 이어할 데이터(저장된 스테이지와 같은 곳)일 때만 "이어하기 + 새로하기"
+  const resumable = !!load() && lobbyPick===sv.stage;
+  $('lbContinue').textContent = resumable ? '이어하기' : '시작하기';
+  $('lbNew').style.display = resumable ? '' : 'none';
+  $('lobby').classList.add('on');
+}
+// 클리어한 스테이지 아무거나 골라 플레이
+function stageSelect(){
+  const sv=load()||{stage:1,maxStage:1};
+  const mx=Math.max(sv.maxStage||sv.stage||1, sv.stage||1);
+  const cur=lobbyPick||sv.stage;
+  const total=Math.max(STAGE_TABLE.length-1, mx);   // 오픈스펙 10개는 항상 전부 노출
+  const rows=[];
+  for(let i=1;i<=total;i++){
+    const lock = i>mx;
+    const tbl=STAGE_TABLE[i];
+    const sc=tbl? [...new Set(tbl.map(g=>g.c))] : PETS.filter(p=>p.at<=i).map(p=>p.k);
+    const pets=PETS.filter(p=>sc.includes(p.k));   // 소유가 아니라 "이 판에 나오는" 색
+    /* ★ v2.3 — 권장레벨 미달을 "레벨 부족" 같은 별도 라벨로 알리지 않는다.
+       라벨은 어느 펫이 문제인지를 안 알려줘서 결국 펫 관리로 들어가 하나씩 비교해야 한다.
+       모자란 펫의 숫자만 붉게 칠하면 어디를 올려야 하는지가 그 자리에서 끝난다. */
+    const rec=REC_LV[i]||{};
+    const rq=PETS.filter(p=>rec[p.k]).map(p=>{
+      const have=Math.max(sv.lv?.[p.k]||0,1);          // 미합류 펫은 Lv1로 간주
+      return `<b class="${have<rec[p.k]?'lack':''}">${p.n[0]}${rec[p.k]}</b>`;
+    }).join(' ');
+    rows.push(`<button class="srow ${i===cur&&!lock?'cur':''} ${lock?'lock':''}" data-s="${i}" ${lock?'disabled':''}>
+      <span class="sn">STAGE ${i}
+        <span class="rq">${rq?'권장레벨 '+rq:''}</span></span>
+      <span class="sp">${pets.map(p=>petSVG(p.k,22)).join('')}${
+        lock?'<span class="lk">잠김</span>':''}</span></button>`);
+  }
+  $('sheet').innerHTML=`
+    <p class="big" style="font-size:20px">스테이지 선택</p>
+    <p class="sub" style="margin-bottom:6px">도달한 곳까지 다시 갈 수 있습니다<br>
+      <span class="tag">STAGE ${mx} 까지 열림 · 전체 ${total}</span></p>
+    <div class="slist">${rows.join('')}</div>
+    <button class="ghost" id="closeBtn" style="margin-top:14px">닫기</button>`;
+  ovOpen();
+  $('sheet').querySelectorAll('.srow:not(.lock)').forEach(b=>b.onclick=()=>{
+    lobbyPick=+b.dataset.s;              // 고르기만. 시작은 버튼으로.
+    ovClose();
+    openLobby();                          // 버튼 구성까지 갱신
+  });
+  $('closeBtn').onclick=()=>ovClose();
+}
+$('lbCard').onclick=stageSelect;
+$('lbGuide').onclick=function(){ openGuide(0) };
+$('lbContinue').onclick=()=>{ const sv=load()||{};
+  $('lobby').classList.remove('on');
+  newGame({stage:lobbyPick||sv.stage||1, coin:sv.coin||0,
+    gem:sv.gem, lv:sv.lv||{b:1,r:0,g:0,y:0}, best:sv.best||0, maxStage:sv.maxStage||1}) };
+$('lbNew').onclick=()=>{ const sv=load()||{};
+  $('lobby').classList.remove('on');
+  newGame({stage:lobbyPick||sv.stage||1, coin:0, best:0,
+    lv:sv.lv||{b:1,r:0,g:0,y:0}, maxStage:sv.maxStage||1}); save() };
+$('lbPets').onclick=()=>{ if(!S) newGame(load()); showPets(true,()=>{
+  ovClose(); openLobby() }) };
+
+/* ---------- 계측 ---------- */
+document.addEventListener('visibilitychange',()=>{
+  const t=Date.now();
+  if(document.hidden){ S.T.lastBlur=t; S.T.blurs++; if(roundLog)roundLog.blurs++ }
+  else if(S.T.lastBlur){ S.T.blurMs+=t-S.T.lastBlur; S.T.lastBlur=0 }
+});
+const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
+function exportLog(){
+  const st=S.T.stages;
+  // ★ 세션 δ — 회계 항등식 기반. 이 값 하나로 밸런스 표 전체가 재보정된다
+  const rm=S.T.cellsMerged+S.T.cellsDelivered;
+  const delta = S.T.drops? +(1-rm/S.T.drops).toFixed(4) : null;
+  // ★ 드롭 간격 분포 — 병행이 성립하면 이중봉(짧은 간격 + 긴 공백)이 된다
+  const iv=[]; for(const sg of st){ for(let i=1;i<sg.drops.length;i++) iv.push(sg.drops[i].t-sg.drops[i-1].t) }
+  const fast=iv.filter(v=>v<2000).length, mid=iv.filter(v=>v>=2000&&v<=5000).length, slow=iv.filter(v=>v>5000).length;
+  const bim = iv.length>=8 ? {n:iv.length,
+      fastPct:Math.round(fast/iv.length*100), midPct:Math.round(mid/iv.length*100), slowPct:Math.round(slow/iv.length*100),
+      index:+(2*Math.min(fast,slow)/iv.length).toFixed(2),
+      pass: fast/iv.length>=.35 && slow/iv.length>=.20 && mid/iv.length<=.35,
+      medianMs:[...iv].sort((a,b)=>a-b)[Math.floor(iv.length/2)]} : null;
+  const d={proto:'rogueMerge v2',seed:SEED,at:new Date().toISOString(),distMode:S.T.distMode,
+    summary:{stages:st.length,
+      cleared:st.filter(s=>s.endBy==='clear').length,
+      failed:st.filter(s=>s.endBy==='full').length,
+      bestCombo:S.best,
+      delta, S_pred: delta>0?Math.round(30/delta):null,
+      drops:S.T.drops, cellsMerged:S.T.cellsMerged, cellsDelivered:S.T.cellsDelivered,
+      bimodal:bim,
+      avgStageMs:avg(st.map(s=>s.durMs)),
+      avgWaitMs:avg(st.map(s=>s.waitMs).filter(v=>v!=null)),
+      avgReadyToShipMs:avg(st.map(s=>s.readyToShipMs).filter(v=>v!=null)),
+      avgDrops:avg(st.map(s=>s.drops.length)),
+      avgShips:avg(st.map(s=>s.ships)),
+      tabBlurs:S.T.blurs,tabBlurMs:S.T.blurMs},
+    stages:st};
+  const txt=JSON.stringify(d,null,2);
+  const q=d.summary;
+  $('sheet').innerHTML=`
+    <p class="big" style="font-size:20px">계측 로그</p>
+    <p class="sub" style="margin-bottom:10px;text-align:left;line-height:1.9">
+      <b style="color:var(--ok)">δ ${q.delta??'-'}</b> → 생존 드롭 예측 <b>${q.S_pred??'-'}</b>
+      <span class="tag">(드롭 ${q.drops} − 머지 ${q.cellsMerged} − 납품 ${q.cellsDelivered})</span><br>
+      확률표 방식 <b>${d.distMode}</b><br>
+      완료 스테이지 <b>${q.stages}</b> (클리어 ${q.cleared} / 실패 ${q.failed})<br>
+      스테이지 평균 <b>${q.avgStageMs??'-'}</b> ms<br>
+      납품 후 대기 평균 <b>${q.avgWaitMs??'-'}</b> ms<br>
+      제출 가능→제출 평균 <b>${q.avgReadyToShipMs??'-'}</b> ms<br>
+      평균 드롭 <b>${q.avgDrops??'-'}</b> · 평균 납품 <b>${q.avgShips??'-'}</b><br>
+      최고 콤보 <b>${q.bestCombo}</b>
+    </p>
+    <p class="sub" style="margin-bottom:12px;text-align:left;line-height:1.9;
+       border-top:1px solid var(--line);padding-top:10px">
+      <b>★ 드롭 간격 분포</b> — 병행이면 이중봉<br>
+      ${q.bimodal? `&lt;2초 <b>${q.bimodal.fastPct}%</b> · 2~5초 <b>${q.bimodal.midPct}%</b> · &gt;5초 <b>${q.bimodal.slowPct}%</b><br>
+        중앙값 <b>${(q.bimodal.medianMs/1000).toFixed(1)}</b>초 · 지수 <b>${q.bimodal.index}</b>
+        <b style="color:${q.bimodal.pass?'var(--ok)':'#ff8f7a'}">${q.bimodal.pass?'이중봉 성립':'단봉 — 병행 아님'}</b>`
+       : '<span class="tag">드롭 8회 이상부터 집계</span>'}<br>
+      화면 이탈 <b>${q.tabBlurs}</b>회 / <b>${Math.round(q.tabBlurMs/1000)}</b>초
+    </p>
+    <textarea id="logTxt" readonly style="width:100%;height:150px;background:#171923;
+      color:#8b90a3;border:1px solid var(--line);border-radius:9px;padding:8px;
+      font-size:10px;font-family:monospace">${txt.replace(/</g,'&lt;')}</textarea>
+    <button class="now" id="copyBtn" style="margin-top:10px;font-size:14px;padding:11px 26px">전체 복사</button>
+    <button class="ghost" id="closeBtn">닫기</button>`;
+  ovOpen();
+  $('copyBtn').onclick=()=>{ const t=$('logTxt'); t.select();
+    try{ document.execCommand('copy'); $('copyBtn').textContent='복사됨' }catch(_){} };
+  $('closeBtn').onclick=()=>ovClose();
+}
+
+/* ---------- 보드 크기 맞춤 ---------- */
+function fitBoard(){
+  const wrap=$('boardWrap'), box=$('boardBox');
+  if(!wrap||!box) return;
+  const availH = wrap.clientHeight - 12 - 26;
+  const availW = wrap.clientWidth - 12;
+  // 가로를 최대한 채우되, 높이가 모자라면 높이 기준으로 줄인다
+  const w = Math.max(160, Math.min(availW, Math.floor((availH-20)*5/6)+16));
+  const cell = (w-16)/5;
+  const h = cell*6 + 20;
+  boardEl.style.width = w+'px';
+  boardEl.style.height = h+'px';
+  boardEl.style.margin = '0 auto';
+  box.style.width = wrap.clientWidth+'px';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SIM — 시뮬 = 프로토. 별도 구현 없음.
+   defer/SYNC 로 같은 코어(drop→step→finishMerge→scan→submit)를 동기 실행한다.
+   그래서 "시뮬과 빌드가 갈라졌나?"라는 질문 자체가 성립하지 않는다.
+   ════════════════════════════════════════════════════════════════ */
+window.SIM=(function(){
+  const snap=()=>({
+    grid:S.grid.map(r=>r.map(e=>e?{...e}:null)),
+    queue:S.queue.map(q=>({...q})),
+    goals:S.goals.map(g=>({...g})),
+    orders:S.orders.map(o=>({id:o.id,reqs:o.reqs.map(r=>({...r}))})),
+    T:{...S.T}, coin:S.coin, gem:S.gem, combo:S.combo, best:S.best,
+    over:S.over, busy, rng:rng.get(),
+    bag:JSON.parse(JSON.stringify(BAG)), lastV:{...lastV},
+    rl:{merges:roundLog.merges, chains:roundLog.chains, ships:roundLog.ships,
+        cellsMerged:roundLog.cellsMerged, cellsDelivered:roundLog.cellsDelivered,
+        drops:roundLog.drops.length},
+  });
+  const restore=z=>{
+    S.grid=z.grid.map(r=>r.map(e=>e?{...e}:null));
+    S.queue=z.queue.map(q=>({...q}));
+    S.goals=z.goals.map(g=>({...g}));
+    S.orders=z.orders.map(o=>({id:o.id,reqs:o.reqs.map(r=>({...r}))}));
+    S.T={...z.T}; S.coin=z.coin; S.gem=z.gem; S.combo=z.combo; S.best=z.best;
+    S.over=z.over; busy=z.busy; rng.set(z.rng);
+    BAG=JSON.parse(JSON.stringify(z.bag)); lastV={...z.lastV};
+    Object.assign(roundLog,{merges:z.rl.merges,chains:z.rl.chains,ships:z.rl.ships,
+      cellsMerged:z.rl.cellsMerged,cellsDelivered:z.rl.cellsDelivered});
+    roundLog.drops.length=z.rl.drops;
+  };
+  const occ=()=>{let u=0;for(const r of S.grid)for(const e of r)if(e)u++;return u};
+  const drainOrders=()=>{ let g=0; while(g++<40){ const o=S.orders.find(orderReady); if(!o)break;
+    const before=S.orders.length; submit(o.id); if(S.orders.length===before) break; if(S.over) break } };
+  function score(){
+    let used=0,top=0,mx=0,hit=0;
+    for(let x=0;x<COLS;x++){ let h=0;
+      for(let y=0;y<ROWS;y++){ const e=S.grid[y][x]; if(e){used++;h=ROWS-y;if(e.v>mx)mx=e.v;} }
+      if(h>top)top=h; }
+    for(const g of S.goals) if(g.done<g.need)
+      for(const r of S.grid) for(const e of r) if(e&&e.c===g.c&&e.v===g.v) hit++;
+    return {used,top,mx,hit};
+  }
+  function bestCol(){
+    const z=snap(); const b0=score();
+    let best=-1,bs=-1e18;
+    for(let x=0;x<COLS;x++){
+      if(S.grid[0][x] && !topMergeable(x,S.queue[0])) continue;
+      drop(x);
+      const a=score();
+      const sc = (b0.used - a.used)*70 + a.hit*110 + Math.log2(VNUM(a.mx||1))*8 - a.used*9 - a.top*4;
+      restore(z);
+      if(sc>bs){bs=sc;best=x}
+    }
+    return best;
+  }
+  function randCol(){ const ok=[]; for(let x=0;x<COLS;x++) if(!S.grid[0][x]||topMergeable(x,S.queue[0])) ok.push(x);
+    return ok.length? ok[Math.floor(rng()*ok.length)] : -1; }
+
+  function run(stage, lvmap, seed, opt){
+    opt=opt||{}; const cap=opt.cap||1200, greedy=opt.greedy!==false;
+    /* ★ SIM 은 라이브 세션을 절대 오염시키면 안 된다.
+       예전엔 stage/lv 만 되돌리고 grid·goals·over 를 그대로 뒀다 —
+       SIM 을 돌린 뒤 실제 클릭이 S.over=true 에 막혀 아무 일도 안 일어났다.
+       S 전체를 스냅샷하고 finally 에서 통째로 되돌린다. */
+    const prev={SYNC, stage:S.stage, lv:{...S.lv}, rng, roundLog,
+      live:JSON.parse(JSON.stringify({grid:S.grid,queue:S.queue,goals:S.goals,orders:S.orders,
+        T:S.T,coin:S.coin,gem:S.gem,items:S.items,over:S.over,combo:S.combo,revived:S.revived})),
+      _osig:S._osig, bag:JSON.parse(JSON.stringify(BAG)), lastV:{...lastV}};
+    SYNC=true;
+    try{
+      S.stage=stage; S.lv={...lvmap}; S.over=false; S.simClear=false; busy=false;
+      S.coin=0; S.gem=999; S.revived=true; S.items={del:0,swp:0,up:0,dn:0,rbw:0};
+      rng=mulberry32(seed);
+      buildStage(); stageStart();
+      S.T.drops=0; S.T.cellsMerged=0; S.T.cellsDelivered=0;
+      let d=0, firstDeliv=null, dbl=S.orders.filter(o=>o.reqs.length>1).length;
+      const orders0=S.orders.length;
+      while(d<cap && !S.over){
+        drainOrders(); if(S.over) break;
+        if(firstDeliv===null && S.T.cellsDelivered>0) firstDeliv=d;
+        const x=greedy?bestCol():randCol();
+        if(x<0){ S.over=true; S.simClear=false; break }
+        drop(x); d++;
+      }
+      drainOrders();
+      const o=occ(), rm=S.T.cellsMerged+S.T.cellsDelivered;
+      let maxV=0; for(const r of S.grid) for(const e of r) if(e&&e.v>maxV) maxV=e.v;
+      return {stage, drops:S.T.drops, cm:S.T.cellsMerged, cd:S.T.cellsDelivered, occ:o,
+        ledgerOK:(S.T.drops-rm)===o, clear:!!S.simClear, gold:S.coin, maxV,
+        cards:orders0, dblCards:dbl, firstDeliv,
+        delta:S.T.drops? +(1-rm/S.T.drops).toFixed(4) : null};
+    } finally {
+      SYNC=prev.SYNC; S.stage=prev.stage; S.lv=prev.lv; busy=false;
+      Object.assign(S, prev.live); S._osig=prev._osig;
+      rng=prev.rng; roundLog=prev.roundLog; BAG=prev.bag; lastV=prev.lastV;
+    }
+  }
+  function batch(stage, lvmap, N, opt){
+    const rs=[]; for(let i=0;i<N;i++) rs.push(run(stage, lvmap, 4400+i*3571, opt));
+    const avg=k=>+(rs.reduce((a,r)=>a+(r[k]||0),0)/rs.length).toFixed(2);
+    const cl=rs.filter(r=>r.clear);
+    return {stage, N, clearRate:+(cl.length/N*100).toFixed(1),
+      delta:avg('delta'), drops:avg('drops'), gold:avg('gold'),
+      maxV:Math.max(...rs.map(r=>r.maxV)), cards:avg('cards'), dblCards:avg('dblCards'),
+      ledgerOK:rs.every(r=>r.ledgerOK),
+      clearDrops: cl.length? +(cl.reduce((a,r)=>a+r.drops,0)/cl.length).toFixed(1) : null};
+  }
+  return {run, batch, snap, restore, occ, bestCol};
+})();
+
+window.addEventListener('resize', fitBoard);
+
+/* ---------- 부팅 ----------
+   ★ 항상 로비에서 시작한다. 세이브 유무와 무관.
+     예전엔 첫 실행이 곧바로 가이드였고, 닫으면 인게임으로 떨어졌다 —
+     "지금 무슨 판을 하는 건지" 모른 채 보드부터 마주친다는 뜻이라 나빴다.
+     로비는 스테이지·골드·펫을 먼저 보여주는 자리다. 여기가 진입점이어야 한다.
+   가이드는 자동으로 안 띄우고 로비의 [플레이 가이드] 버튼으로만 연다. */
+if(EMBED){
+  const lv={b:0,r:0,g:0,y:0};
+  (EMBED.pets||'b:1').split(',').forEach(pp=>{ const [k,v]=pp.split(':'); if(k in lv) lv[k]=+v||0 });
+  gemStart = +EMBED.gem||0;
+  LOOT_BASE = +EMBED.loot||0;
+  LOOT_TXT  = EMBED.loottxt||'';
+  try{ LOOT2 = JSON.parse(EMBED.loot2||'[]') }catch(_){ LOOT2=[] }
+  let inv={}; try{ inv=JSON.parse(EMBED.items||'{}') }catch(_){}
+  newGame({ stage:Math.max(1,+EMBED.stage||1), coin:0, gem:gemStart, lv,
+            best:0, maxStage:9999, items:inv });
+  document.documentElement.classList.add('embed');
+  const hn=$('huntName');
+  if(hn) hn.textContent = (EMBED.name||('사냥터 '+S.stage));
+  const hb=$('helpTop'); if(hb) hb.onclick=()=>helpSheet(false);
+  /* 규칙 안내 — 띄울지 말지는 셸(index.html)이 정해서 guide=1 로 넘긴다.
+     화면 전환이 끝난 뒤에 띄운다. 전환 중에 겹치면 둘 다 어지럽다 */
+  if(+EMBED.guide) setTimeout(()=>helpSheet(true), 700);
+  /* 나가기 — 중도 이탈도 실패와 같은 취급(로얄매치 규칙) */
+  $('exitTop').onclick=()=>{
+    $('sheet').innerHTML=`<p class="big">사냥을 그만둘까요?</p>
+      <p class="sub">지금 나가면 <b style="color:#ff8fa0">하트 1</b>을 잃고<br>재료도 못 가져갑니다.</p>
+      <div class="prow"><button class="mbtn use eq" id="stayBtn">계속하기</button>
+      <button class="mbtn close eq" id="outBtn">나가기</button></div>`;
+    ovOpen(true);
+    $('stayBtn').onclick=()=>ovClose();
+    $('outBtn').onclick=()=>post('quit');
+  };
+}else{
+  const saved=load();
+  newGame(saved || null);
+  openLobby();
+}
+fitBoard(); setTimeout(fitBoard,60);
+$('itemCancel').onclick=endItem;
+window.__dbg=()=>S;
+</script>
+</body>
+</html>
