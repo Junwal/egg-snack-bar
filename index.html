@@ -628,12 +628,16 @@
  .gh.able ellipse,.gh.able rect{stroke:#ffd166;opacity:1;animation:ghPulse 1.4s ease-in-out infinite}
  .gh.able text{fill:#ffd166;opacity:1}
  @keyframes ghPulse{0%,100%{opacity:.55}50%{opacity:1}}
- .wbadge circle{fill:#20242f;stroke:#3b4257;stroke-width:1.5}
- .wbadge text{font-size:14px;text-anchor:middle}
- .wbadge{animation:wbFloat 1.5s ease-in-out infinite;cursor:pointer}
+ /* 화로 위 배지. 예전엔 .lv 만 스타일이 없어서 기본 남색(#20242f)이 그대로 떠
+    화면에 검은 원이 불쑥 생긴 것처럼 보였다. 셋 다 '누를 것'으로 읽히게 밝게 깐다 */
+ .wbadge circle{fill:#ffd166;stroke:#8a6d1e;stroke-width:1.6}
+ .wbadge text{font-size:13px;text-anchor:middle;fill:#3a2c00;font-weight:900}
+ .wbadge{animation:wbFloat 1.5s ease-in-out infinite;cursor:pointer;
+   filter:drop-shadow(0 2px 4px rgba(0,0,0,.45))}
  @keyframes wbFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
- .wbadge.up circle{stroke:var(--gold);fill:#3a3218}
- .wbadge.new circle{stroke:var(--ok);fill:#183024}
+ .wbadge.up circle{fill:#ffe08a;stroke:#a8791b}
+ .wbadge.new circle{fill:#8fe0a8;stroke:#2c7a4a}
+ .wbadge.lv circle{fill:#ffd166;stroke:#8a6d1e}
 
  /* ── 가이드 퀘스트 배너 ──────────────────────────────────────
     매장 화면 상단. 항상 한 개만. 탭하면 그 화면으로 점프한다 */
@@ -807,6 +811,12 @@
  #bnr .bs{font-size:12px;font-weight:800;color:#ffd9ea;margin-top:3px;
    text-shadow:0 2px 8px rgba(0,0,0,.95)}
  #bnr.out{opacity:0;transform:translate(-50%,-64%);transition:opacity .4s ease,transform .4s ease}
+ /* 붙잡는 배너 — 읽고 탭할 때까지 남는다. 화면 전체가 클릭 대상이라
+    어디를 눌러도 닫히고, 아래에 닫는 법을 적어 둔다 */
+ #bnr.hold{pointer-events:auto;animation:bnrin .4s cubic-bezier(.2,1.3,.4,1), bnrHold 2.2s ease-in-out .4s infinite}
+ #bnr.hold .bs{font-size:13px;color:#fff2c9;line-height:1.55;max-width:280px}
+ #bnr .bx{margin-top:12px;font-size:11px;font-weight:900;color:#ffd166;letter-spacing:.04em;opacity:.9}
+ @keyframes bnrHold{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.025)}}
  @keyframes bnrin{from{opacity:0;transform:translate(-50%,-34%)}}
  /* 좌석 스탯 칩 바로 아래. 매장 밖에서는 콘텐츠를 가리므로 접어 둔다 —
     위시 토스트는 사라지지 않으니 매장으로 돌아오면 그대로 다시 보인다 */
@@ -1314,7 +1324,9 @@ function stepShop(dt){
         if(c.mt<=0 && !c.path){ c.st='seated'; c.t=0; c.tick=Math.random()*1.8; c.face='eat';
           /* 첫 손님이 앉는 순간에만. '의자를 사라'고 하기 전에 왜 사는지를 본다 */
           if(!S.sawSeat){ S.sawSeat=1; save();
-            banner('🪑 앉아서 먹어요', '자리가 있으면 앉아서 먹고 갑니다 · 골드와 호감도를 계속 더 줘요'); } }
+            banner('🪑 앉아서 먹어요',
+              '자리가 있으면 앉아서 먹고 갑니다<br>앉은 손님은 <b>골드와 호감도를 계속</b> 더 줘요',
+              true, ()=>{ S.seatTip=1; save(); qLast=''; }); } }
         break;
       case 'seated': {                                 // 초당 골드 + 경험치 — 띠링띠링
         c.t += dt; c.tick += dt; c.chatT -= dt;
@@ -1365,8 +1377,7 @@ function stepShop(dt){
           if(m){ const n=(S.miss[m.id]=(S.miss[m.id]||0)+1); S.missNew=1;
             /* 토스트는 폐지. 3회 이상 찾은 메뉴만 가이드 퀘스트로 승격된다 —
                1회 스침까지 띄우던 게 토스트가 쌓여 화면을 덮던 원인이었다 */
-            if(!S.wish.includes(m.id)) S.wish.push(m.id);
-            unlockNav('bag'); }
+            if(!S.wish.includes(m.id)) S.wish.push(m.id); }
           st.say='아직 없는 메뉴에요ㅠㅠ'; SFX('sad');  // 손님이 떠날 때까지 제자리에서 사과한다
           st.st='sorry'; st.t=0;
           break;
@@ -1479,6 +1490,10 @@ const navGuide = id => ({
 function unlockNav(id, jump){
   if(NAV_ON(id)) return;
   (S.nav = S.nav || {})[id] = 1; save(); draw(); SFX('unlock');
+  /* 'defer' — 탭만 열고 설명은 미룬다. 해금하자마자 팝업을 띄우면
+     "이 탭을 눌러라"와 "이 탭은 이런 곳이다"가 한꺼번에 와서 둘 다 안 읽힌다.
+     유저가 직접 눌러 들어온 다음에 설명하는 편이 순서가 맞는다 */
+  if(jump==='defer'){ (S.navWait = S.navWait || {})[id]=1; save(); return }
   const g=navGuide(id); if(!g) return;
   setTimeout(()=>{
     $('sheet').innerHTML=`
@@ -1492,23 +1507,42 @@ function unlockNav(id, jump){
     $('ov').classList.add('on'); document.body.classList.add('ovon');
   }, jump===false ? 900 : 700);
 }
+/* 미뤄 둔 해금 설명 — 그 탭에 처음 들어온 순간에 띄운다 */
+function navGuideShow(id){
+  const g=navGuide(id); if(!g) return;
+  $('sheet').innerHTML=`
+    <p class="ngt">${g.t} <em>해금!</em></p>
+    <div class="n3">${g.cuts.map((c,i)=>`
+      <div class="nc"><span class="nn">${i+1}</span>
+        <div class="nz">${c.z}</div>
+        <div class="nt">${c.c}</div></div>`).join('')}</div>
+    <button class="mbtn" onclick="ovClose()">확인</button>`;
+  $('ov').classList.add('on'); document.body.classList.add('ovon');
+}
 /* 잠긴 화로 — 왜 잠겼는지 그 자리에서 알린다 */
 /* 해금·합류처럼 '사건'인 알림은 중앙에 크게 한 번 스치고 사라진다 */
 /* 배너는 한 장씩 줄을 세운다. 두 개가 겹치면 둘 다 못 읽고,
    모달이 열려 있으면 그 위를 덮으니 닫힐 때까지 기다린다 */
 let bnrQ=[], bnrOn=0;
-function banner(t, sub){ bnrQ.push([t,sub]); bnrNext() }
+/* hold=true 면 자동으로 안 사라진다. 처음 배우는 규칙은 1.7초 안에 못 읽는다 —
+   읽고 탭할 때까지 기다렸다가, 닫히는 순간 다음 안내로 이어 준다 */
+function banner(t, sub, hold, after){ bnrQ.push([t,sub,hold,after]); bnrNext() }
 function bnrNext(){
   if(bnrOn || !bnrQ.length) return;
   if(document.body.classList.contains('ovon') || document.body.classList.contains('inpuz'))
     return void setTimeout(bnrNext, 600);
   bnrOn=1;
-  const [t,sub]=bnrQ.shift();
+  const [t,sub,hold,after]=bnrQ.shift();
   const b=document.createElement('div'); b.id='bnr';
-  b.innerHTML=`<div class="bt">${t}</div>${sub?`<div class="bs">${sub}</div>`:''}`;
+  b.innerHTML=`<div class="bt">${t}</div>${sub?`<div class="bs">${sub}</div>`:''}`
+            + (hold?`<div class="bx">탭해서 닫기</div>`:'');
   document.body.appendChild(b);
-  setTimeout(()=>{ b.classList.add('out');
-    setTimeout(()=>{ b.remove(); bnrOn=0; bnrNext() }, 420) }, 1700);
+  const close=()=>{ b.classList.add('out');
+    setTimeout(()=>{ b.remove(); bnrOn=0; if(after) try{ after() }catch(_){}; bnrNext() }, 420) };
+  if(hold){ b.classList.add('hold');
+    b.addEventListener('pointerdown', e=>{ e.stopPropagation(); close() }, {once:true});
+    setTimeout(()=>document.addEventListener('pointerdown', close, {once:true}), 400);
+  } else setTimeout(close, 1700);
 }
 /* 수급처 안내 — 소모품 어디서 나오는지 보는 그 방식 */
 function srcOf(k,g){
@@ -3043,6 +3077,9 @@ function go(t){ if(!NAV_ON(t)) t='store';
   /* 탭으로 들어올 때는 늘 사냥터가 먼저다 — 마지막 위치를 기억하면
      "재료 캐러 가자"를 눌렀는데 인벤토리가 뜬다. 개발 화면은 예외 */
   if(t==='bag' && tab!=='bag' && !devOn) bagTab='hunt';
+  (S.navSeen = S.navSeen || {})[t]=1;
+  if(S.navWait && S.navWait[t]){ delete S.navWait[t]; save();
+    setTimeout(()=>navGuideShow(t), 380); }
   $('ov').classList.remove('on','bottom'); tab=t; renderHUD();
   document.body.classList.toggle('tstore', t==='store');
   document.body.classList.toggle('tdex', t==='dex'); for(const b of document.querySelectorAll('.tab')) b.classList.toggle('on',b.dataset.t===t); draw(); }
@@ -3458,6 +3495,20 @@ const UNLOCKS = (()=>{
    ② 시키기 전에 이유를 보여준다. 손님이 앉는 걸 보고 나서 의자를 사고,
       손님이 멸치 주먹밥을 조르는 걸 보고 나서 사냥을 간다. */
 const playSec = () => (now() - (S.t0 || now()))/1000;
+/* 손님이 실제로 찾았는데 아직 못 파는 메뉴 — 사냥을 가는 '이유' */
+const wishMenu = () => MENU.filter(m=>!S.made[m.id] && (S.miss[m.id]||0)>0)
+  .sort((a,b)=>(S.miss[b.id]||0)-(S.miss[a.id]||0))[0] || null;
+/* 없는 메뉴를 조르는 손님이 왔을 때 — 재료라는 개념을 여기서 처음 꺼낸다 */
+function wishGuide(){
+  const m=wishMenu();
+  $('sheet').innerHTML=`<p class="big">🥲 ${m?josa(m.name,'이','가'):'새 메뉴가'} 없어요</p>
+    <p class="sub">손님이 찾는 메뉴를 팔려면 <b>먼저 개발</b>해야 합니다</p>
+    <div class="card" style="font-size:12.5px;line-height:1.75;color:#c7ccda">
+      개발에는 <b style="color:var(--gold)">재료</b>가 필요하고,<br>
+      재료는 <b style="color:var(--gold)">사냥터</b>에서 알을 합쳐 캡니다.</div>
+    <button class="mbtn" onclick="ovClose();unlockNav('bag','defer')">재료 탭 열기</button>`;
+  $('ov').classList.add('on'); document.body.classList.add('ovon');
+}
 const QUEST = [
   /* 첫 5초는 그냥 판다. 켜자마자 지시가 뜨면 게임이 아니라 설명서가 된다 */
   { id:'menu', t:'주먹밥을 강화하세요', s:'판매가가 바로 올라요',
@@ -3469,8 +3520,8 @@ const QUEST = [
 
   /* 의자는 70G 다. 강화 직후엔 못 산다 — 살 수 있을 때 띄운다.
      그전에 sawSeat(첫 착석 배너)이 이유를 이미 보여줬다 */
-  { id:'seat', t:'의자를 늘려보세요', s:'앉은 손님은 계속 벌어다 줍니다',
-    when:()=>S.sawSeat && S.gold>=upCost(UPG.find(u=>u.id==='seat'), uLv('seat')),
+  { id:'seat', t:'돈을 모아 의자를 늘려보세요', s:'앉은 손님은 계속 벌어다 줍니다',
+    when:()=>S.seatTip && S.gold>=upCost(UPG.find(u=>u.id==='seat'), uLv('seat')),
     spot:()=>$q('.fab.mng'), tab:'store',
     go:()=>{ mngTab='hall'; openManage() }, hl:'#sheet [data-up="seat"]',
     done:()=>uLv('seat')>1 },
@@ -3480,14 +3531,23 @@ const QUEST = [
     /* 완료를 받는 순간 손님이 멸치 주먹밥을 조르기 시작한다 —
        다음 퀘스트(사냥)로 가는 이유를 게임이 먼저 만든다 */
     onClaim:()=>{ const m=MENU.find(x=>x.id==='m0')||MENU.find(x=>!S.made[x.id]);
-      if(m){ S.miss[m.id]=Math.max(3,(S.miss[m.id]||0)); S.missNew=1;
+      if(m){ S.miss[m.id]=Math.max(1,(S.miss[m.id]||0)); S.missNew=1;
         if(!S.wish.includes(m.id)) S.wish.push(m.id);
-        banner('🥲 '+m.name+' 없어요?', '손님이 찾기 시작했어요 · 재료를 캐 옵시다'); }
-      unlockNav('bag'); } },
+        banner('🥲 '+m.name+' 없어요?', '손님이 찾기 시작했어요'); } } },
 
-  { id:'hunt1', t:'사냥터에서 멸치를 캐오세요', s:'알을 합치면 재료가 됩니다',
-    spot:()=>tab==='bag'&&bagTab==='hunt'?$q('#botcta .mbtn'):$q('[data-t="bag"]'),
-    tab:'bag', go:()=>{ bagTab='hunt'; devOn=false; go('bag') }, hl:'#botcta .mbtn',
+  /* 한 퀘스트 안에서 순서가 흐른다 —
+     조르는 손님 → (탭) 재료가 뭔지 설명 → 탭 해금·포커싱 → 들어가면 재료 탭 설명
+     → 확인하면 '사냥터 가기'로 스포트라이트가 저절로 옮겨간다 */
+  { id:'hunt1',
+    t:()=>{ const m=wishMenu(); return m ? `${m.name} 재료를 캐오세요` : '사냥터에서 재료를 캐오세요' },
+    s:'없는 메뉴는 재료를 모아 개발합니다',
+    when:()=>!!wishMenu(),
+    tab:'bag',
+    go:()=>{ if(!NAV_ON('bag')) return wishGuide();
+             bagTab='hunt'; devOn=false; go('bag') },
+    spot:()=>!NAV_ON('bag') ? null
+            : (tab==='bag' && bagTab==='hunt' && !devOn ? $q('#botcta .mbtn') : $q('[data-t="bag"]')),
+    hl:'#botcta .mbtn',
     done:()=>!!(S.clr&&Object.keys(S.clr).length),
     onClaim:()=>{ devF=[]; openDev() } },        // 받자마자 개발 화면으로 꽂는다
 
@@ -3628,7 +3688,7 @@ function qClaim(){
   if(!qReady || !qCur) return;
   const q=qCur;
   S.qDone[q.id]=1; S.gem+=QUEST_GEM; save(); SFX('lvup');
-  banner('💎 +'+QUEST_GEM, q.t + ' 완료');
+  banner('💎 +'+QUEST_GEM, (typeof q.t==='function'?q.t():q.t) + ' 완료');
   qCur=null; qReady=false; qLast=''; qSpotLast='';
   if(q.onClaim) try{ q.onClaim() }catch(_){}
   qCur=questPick(); qBar(); qSpot();
@@ -3658,17 +3718,18 @@ function qBar(){
   b.classList.toggle('on', !!on);
   b.classList.toggle('done', !!qReady);
   if(!on || !qCur) return;
-  const key = (qReady?'R|':'') + qCur.id + '|' + (qCur.cur?qCur.cur():'');
+  const qt = typeof qCur.t==='function' ? (()=>{ try{ return qCur.t() }catch(_){ return '' } })() : qCur.t;
+  const key = (qReady?'R|':'') + qCur.id + '|' + qt + '|' + (qCur.cur?qCur.cur():'');
   if(key===qLast) return; qLast=key;
   const pb=b.querySelector('.qbar2');
   if(qReady){
     b.querySelector('.qi').textContent='🎉';
-    b.querySelector('.qt').textContent=qCur.t;
+    b.querySelector('.qt').textContent=qt;
     b.querySelector('.qs').textContent=`완료! 💎 ${QUEST_GEM} 받기`;
     pb.style.display='none'; return;
   }
   b.querySelector('.qi').textContent='📋';
-  b.querySelector('.qt').textContent = qCur.t;
+  b.querySelector('.qt').textContent = qt;
   b.querySelector('.qs').textContent = qCur.s || '';
   if(qCur.n){ const c=Math.min(qCur.n, qCur.cur()); pb.style.display='block';
     pb.firstElementChild.style.width=(c/qCur.n*100)+'%';
