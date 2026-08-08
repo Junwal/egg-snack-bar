@@ -2937,7 +2937,10 @@ function hunt(s){
   /* 규칙 안내는 셸이 판단한다. 퍼즐 쪽 localStorage 플래그에 맡기면
      세이브를 지워도 안 뜨거나, 반대로 브라우저를 바꾸면 또 뜬다 */
   S.hrun = (S.hrun||0) + 1;
-  const showGuide = S.hrun <= 3 ? 1 : 0;
+  /* 규칙 안내는 첫 판에만. 3회로 뒀더니 '들어갈 때마다 뜬다'로 읽혔다 —
+     한 번 본 규칙을 세 번 보여주는 건 안내가 아니라 방해다.
+     다시 보고 싶으면 퍼즐 안 설정(⚙) → '사냥터 규칙'에서 언제든 열린다 */
+  const showGuide = S.hrun <= 1 ? 1 : 0;
   save();
   const info = huntInfo(s);
   const gm = GRADE[info.gMax];
