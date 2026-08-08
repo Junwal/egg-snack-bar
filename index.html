@@ -658,7 +658,7 @@
  #qbar .qbar2{display:none;height:4px;border-radius:99px;background:rgba(24,27,36,.16);margin-top:5px;overflow:hidden}
  #qbar .qbar2 i{display:block;height:100%;border-radius:99px;
    background:linear-gradient(90deg,#c8a24a,#e0c98a);transition:width .3s ease}
- #qbar .qgo{flex:0 0 auto;color:#8a7434;font-size:17px;font-weight:900;text-decoration:none}
+ #qbar .qgo{flex:0 0 auto;margin-right:13px;color:#8a7434;font-size:17px;font-weight:900;text-decoration:none}
  #qbar .qx{flex:0 0 auto;margin-right:12px;background:none;border:none;color:#9aa0ad;
    font-size:11px;font-weight:900;cursor:pointer;padding:6px 3px}
  /* 완료 대기 — 초록으로 바뀌고 '받기'가 뜬다. 눌러야 다음 퀘스트로 넘어간다.
@@ -1098,10 +1098,11 @@ const idleCapH = () => IDLE_BASE_H + uLv('idle');
    주먹밥(5G)에 +8% 는 5.4 라, 반올림하면 두 번 눌러야 1이 올랐다.
    레벨당 최소 +1 을 바닥으로 깔아 한 번 누르면 반드시 숫자가 움직이게 한다.
    판매가가 큰 구간에서는 +8% 가 항상 1보다 크므로 이 바닥은 걸리지 않는다 */
-const menuPrice= m => {
-  const lv=S.mlv[m.id]||0, mul=STAR_MUL[mStar(m)]*priceMul();
+const menuPriceAt = (m, lv) => {
+  const mul = STAR_MUL[mStar(m)]*priceMul();
   return Math.max(Math.round(m.price*mul)+lv, Math.round(m.price*(1+lv*0.08)*mul));
 };
+const menuPrice = m => menuPriceAt(m, S.mlv[m.id]||0);
 /* 골드 아이콘 — 'G' 글자는 숫자와 붙어 읽혀서 오독을 만든다 */
 const SEAT_SVG = `<svg viewBox="0 0 24 24" fill="none"><path d="M5 11V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v5" stroke="#9aa2b8" stroke-width="2" stroke-linecap="round"/><rect x="3" y="11" width="18" height="5" rx="2" fill="#9aa2b8"/><path d="M6 16v4M18 16v4" stroke="#9aa2b8" stroke-width="2" stroke-linecap="round"/></svg>`;
 const QUE_SVG  = `<svg viewBox="0 0 24 24" fill="none"><circle cx="7" cy="7" r="3" fill="#9aa2b8"/><path d="M2 20c0-3 2.2-5 5-5s5 2 5 5" fill="#9aa2b8"/><circle cx="17" cy="8" r="2.4" fill="#9aa2b8" opacity=".55"/><path d="M13 20c0-2.6 1.8-4.4 4-4.4s4 1.8 4 4.4" fill="#9aa2b8" opacity=".55"/></svg>`;
@@ -2048,7 +2049,7 @@ function openMenuMng(hl){
         <div class="ic" style="background:${LINE[m.line].col}22">🍽</div>
         <div class="tx"><div class="nm">${m.name}${star(m)}<span class="lv">Lv.${lv}/${cap}</span></div>
           <div class="ds">${STAR_NAME[mStar(m)]} · 판매가 ${G(menuPrice(m))}
-            ${full?'':`<span style="color:var(--ok)"> → ${G(Math.round(menuPrice(m)*(1+(lv+1)*0.08)/(1+lv*0.08)))}</span>`}</div></div>
+            ${full?'':`<span style="color:var(--ok)"> → ${G(menuPriceAt(m, lv+1))}</span>`}</div></div>
         ${full && !maxed
           ? `<button class="buy able" onclick="ovClose();openDev('store')">✨ 개선</button>`
           : `<button class="buy ${(!full&&S.gold>=c)?'able':''}" onclick="lvMenu('${m.id}');openMenuMng()">${full?'MAX':G(c)}</button>`}
@@ -2575,9 +2576,6 @@ function viewShop(){
   <div class="card"><div class="row"><div class="ic">${SFX.isOn()?'🔊':'🔇'}</div>
     <div class="tx"><div class="nm">소리</div><div class="ds">효과음${BGM.has()?' · 배경음':''} · 키보드 M</div></div>
     <button class="buy ${SFX.isOn()?'able':''}" onclick="toggleSound()">${SFX.isOn()?'켜짐':'꺼짐'}</button></div></div>
-  <div class="card"><div class="row"><div class="ic">🎓</div>
-    <div class="tx"><div class="nm">가이드 퀘스트 다시 보기</div><div class="ds">처음부터 다시 안내합니다</div></div>
-    <button class="buy able" onclick="S.qDone={};S.qOff=0;questStart();go('store')">다시</button></div></div>
 
   <details class="devtool"><summary>프로토 도구</summary>
     <div class="card"><div class="row"><div class="tx"><div class="nm">다이아 +200</div></div>
@@ -3636,8 +3634,9 @@ function hlPin(sel){
   hlSel=sel; hlScrolled=false;
   clearTimeout(hlTO);
   hlTO=setTimeout(hlOff, 15000);        // 안 만져도 15초면 스스로 꺼진다
-  setTimeout(hlPaint, 40);              // go() 가 그린 뒤에 붙는다
-  setTimeout(hlPaint, 220);             // 모달·탭 전환이 늦게 끝나는 경우
+  /* 붙이는 시점이 렌더보다 빠르면 대상이 아직 없다. 모달·탭 전환·화면 전환이
+     각각 다른 타이밍에 끝나므로 여러 번 재시도한다 — 한두 번만 하면 간헐적으로 놓친다 */
+  [40,180,400,700,1100].forEach(ms=>setTimeout(hlPaint, ms));
 }
 function hlPaint(){
   document.querySelectorAll('.qhl').forEach(e=>e.classList.remove('qhl'));
@@ -3657,6 +3656,7 @@ addEventListener('pointerdown', hlOff, true);
 
 function questStart(){
   S.qDone = S.qDone || {};
+  S.qOff = 0;                      // 예전에 껐던 세이브도 다시 켠다 — 이제 끌 수 없다
   /* 진행 중인 세이브에는 정적 라인을 띄우지 않는다.
      ⚠ 판정을 t0 로 한다. 예전엔 uLv('seat')>0 을 봤는데, 새 게임이 의자 1개를
      들고 시작하게 되면서 첫 실행까지 '진행 중'으로 오판해 튜토리얼이 통째로 건너뛰어졌다 */
@@ -3670,8 +3670,11 @@ function questStart(){
   }
   qCur=null; qReady=false;
 }
-function questSkip(){ for(const q of QUEST) S.qDone[q.id]=1; if(qCur) S.qDone[qCur.id]=1;
-  qCur=null; qReady=false; save(); toast('가이드를 껐습니다 · 상점에서 다시 켤 수 있어요'); S.qOff=1 }
+/* 가이드는 끌 수 없다.
+   끄기를 열어 두면 (1) 첫 판에 실수로 눌러 튜토리얼을 통째로 잃고
+   (2) 탭 해금이 퀘스트에 걸린 구간에서 진행이 막힌다.
+   대신 완료할 게 없는 구간에서는 칩이 스스로 숨는다(questPick 이 null 을 준다) */
+function questSkip(){ /* 폐지 — 남겨 둔 건 옛 세이브가 부를 수 있어서다 */ }
 function questPick(){
   const nx = QUEST.find(q=>!S.qDone[q.id]);
   if(nx){
@@ -3709,8 +3712,7 @@ function qBar(){
   if(!b){ b=document.createElement('div'); b.id='qbar';
     b.innerHTML=`<i class="qi">📋</i><span class="qw"><b class="qt"></b><em class="qs"></em>
       <span class="qbar2"><i></i></span></span><u class="qgo">›</u>
-      <button class="qclaim">받기</button>
-      <button class="qx" onclick="event.stopPropagation();questSkip()">✕</button>`;
+      <button class="qclaim">받기</button>`;
     b.onclick=()=>{ if(qReady) return qClaim();
       const q=qCur;
       if(q&&q.go) q.go(); else if(q&&q.tab) go(q.tab);
