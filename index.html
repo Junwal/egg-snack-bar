@@ -993,6 +993,10 @@ const guestsOn = () => { const o=GUEST.filter(g=>S.pets[g.fav]>0 && shopLv()>=g.
    저절로 늘어난 식구는 기억에 안 남는다 — 한 번은 직접 데려와야 한다 */
 const petReady = () => LK.filter(k=>!S.pets[k] && petOn(k));
 function petJoin(){
+  /* 탭 순서는 매장 → 재료 → 상점 → 알바몬 → 도감이다.
+     빨강 합류(매장 Lv3)가 재료 탭보다 먼저 오면 순서가 뒤집혀서,
+     재료가 뭔지도 모르는 유저에게 알바몬 탭이 먼저 열린다 — 재료 뒤로 미룬다 */
+  if(!NAV_ON('bag')) return;
   for(const k of petReady()){
     if(S.pav && S.pav[k]) continue;
     (S.pav = S.pav || {})[k] = 1;
@@ -3017,7 +3021,7 @@ window.addEventListener('message', ev=>{
     if(gem) banner(`💎 ＋${gem}`, '첫 클리어 보너스');
     /* 상점 해금은 여기가 아니라 '첫 메뉴 개발'까지 끝난 뒤다(QUEST dev1).
        캐오자마자 상점 안내가 끼어들면 "이 재료로 뭘 하지"가 끊긴다 */
-    if(S.qDone && S.qDone.dev1) unlockNav('shop');
+    if(S.qDone && S.qDone.dev1) unlockNav('shop');   // 정상 경로는 dev1 완료 · navFallback 이 뒤를 받친다
   }else{
     // 실패·중도이탈 — 로얄매치 규칙대로 하트 1 소모
     if(S.hearts>=HEART_MAX) S.heartAt=now();
@@ -3782,7 +3786,20 @@ function loop(t){
   requestAnimationFrame(loop);
 }
 let hudT=0;
-setInterval(()=>{ heartTick(); renderHUD(); }, 500);   // 하트 회복은 어느 탭에 있든 돈다
+/* ⚠ 탭 해금 안전망.
+   정상 경로는 퀘스트다 — 손님이 조르면 안내가 뜨고, 그 안내에서 재료 탭이 열린다.
+   그런데 가이드를 ✕ 로 끈 유저는 그 팝업을 영영 못 만난다. 재료 탭이 안 열리면
+   사냥을 못 가고, 사냥을 못 가면 상점도 안 열려서 게임이 통째로 멈춘다.
+   어떤 경로로도 도달 못 하는 상태는 남기지 않는다 */
+function navFallback(){
+  /* 정상 경로(퀘스트)를 앞지르면 안 된다. 가이드를 켠 유저에게는 순서가 곧 튜토리얼이다 —
+     가이드를 껐거나, 켰는데도 한참 안 열린 경우에만 뒤에서 연다 */
+  if(!NAV_ON('bag')  && (S.qOff || shopLv()>=4) && (wishMenu() || shopLv()>=4))
+    unlockNav('bag','defer');
+  if(!NAV_ON('shop') && (S.qOff || shopLv()>=6) && S.clr && Object.keys(S.clr).length)
+    unlockNav('shop');
+}
+setInterval(()=>{ heartTick(); renderHUD(); navFallback(); }, 500);   // 하트 회복은 어느 탭에 있든 돈다
 setInterval(save, 5000);
 
 /* ══ 타이틀 ══════════════════════════════════════════════════════
